@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from "react";
 //  Vul na deployment jouw Apps Script URL in:
 // ════════════════════════════════════════════════════════════
 const API_URL =
-  "https://script.google.com/macros/s/AKfycbxafM2cftG9Y0VzmLQ6Arqon8HzArksISASJmcI9scVNwDMQnuZvXYdy4EKttzI4ALO/exec";
+  "https://script.google.com/macros/s/AKfycbz3eJYN5ma_SuPwocnDtI1-XjafTXh7mORZab8XXn2StGkfEecLyDHLR_1bXh8RcP1n/exec";
 const API_KLAAR = !API_URL.includes("JOUW_DEPLOYMENT_ID");
 
 // ─── kleuren ──────────────────────────────────────────────
