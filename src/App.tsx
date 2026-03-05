@@ -105,10 +105,15 @@ function driftSec(items, uur) {
 // ════════════════════════════════════════════════════════════
 //  Google Sheets API
 // ════════════════════════════════════════════════════════════
-async function sheetGet(action, uitzendingId) {
+async function sheetPost(body) {
   if (!API_KLAAR) return null;
   try {
-    const r = await fetch(`${API_URL}?action=${action}&uitzendingId=${encodeURIComponent(uitzendingId)}`);
+    const params = new URLSearchParams({
+      action: body.action,
+      uitzendingId: body.uitzendingId,
+      data: JSON.stringify(body.data),
+    });
+    const r = await fetch(`${API_URL}?${params.toString()}`);
     return await r.json();
   } catch { return null; }
 }
