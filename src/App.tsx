@@ -118,17 +118,6 @@ async function sheetPost(body) {
   } catch { return null; }
 }
 
-async function sheetPost(body) {
-  if (!API_KLAAR) return null;
-  try {
-    const r = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    return await r.json();
-  } catch { return null; }
-}
 
 // ════════════════════════════════════════════════════════════
 //  Debounce hook
