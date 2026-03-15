@@ -105,6 +105,14 @@ function driftSec(items, uur) {
 // ════════════════════════════════════════════════════════════
 //  Google Sheets API
 // ════════════════════════════════════════════════════════════
+async function sheetGet(action, uitzendingId) {
+  if (!API_KLAAR) return null;
+  try {
+    const r = await fetch(`${API_URL}?action=${action}&uitzendingId=${encodeURIComponent(uitzendingId)}`);
+    return await r.json();
+  } catch { return null; }
+}
+
 async function sheetPost(body) {
   if (!API_KLAAR) return null;
   try {
@@ -117,7 +125,6 @@ async function sheetPost(body) {
     return await r.json();
   } catch { return null; }
 }
-
 
 // ════════════════════════════════════════════════════════════
 //  Debounce hook
@@ -773,4 +780,3 @@ function RedactieTab({ uitzendingId, setSyncStatus }) {
     </div>
   );
 }
-
