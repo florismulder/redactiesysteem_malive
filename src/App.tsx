@@ -10,18 +10,18 @@ const API_KLAAR = !API_URL.includes("JOUW_DEPLOYMENT_ID");
 
 // ─── kleuren ──────────────────────────────────────────────
 const BRAND = {
-  roze: "#E91E8C",
-  paars: "#7B2D8B",
-  gradient: "linear-gradient(135deg, #E91E8C, #7B2D8B)",
+  roze: "#FF00E7",
+  paars: "#6A0DAD",
+  gradient: "linear-gradient(135deg, #FF00E7, #6A0DAD)",
 };
 const roleColors = {
-  Eindredactie: "#E91E8C", Host: "#00BCD4",
+  Eindredactie: "#FF00E7", Host: "#00BCD4",
   Techniek: "#FFC107", Nieuwsredactie: "#66BB6A",
 };
 const typeConfig = {
   muziek:    { label:"MUZIEK",    color:"#9C7EF5", icon:"♪" },
   jingle:    { label:"JINGLE",    color:"#607D8B", icon:"▶" },
-  tekst:     { label:"TEKST",     color:"#E91E8C", icon:"✎" },
+  tekst:     { label:"TEKST",     color:"#FF00E7", icon:"✎" },
   nieuws:    { label:"NIEUWS",    color:"#26A69A", icon:"📰" },
   interview: { label:"INTERVIEW", color:"#FF7043", icon:"🎙" },
   special:   { label:"SPECIAL",  color:"#42A5F5", icon:"★"  },
@@ -331,7 +331,7 @@ function DriftBalk({ items, uur }) {
     : `↑ ${toMMSS(abs)} te kort — eindigt om ${addSec(uur===1?"13:00":"14:00",drift)}`;
 
   return (
-    <div style={{marginBottom:10,padding:"6px 12px",borderRadius:4,display:"flex",alignItems:"center",gap:10,
+    <div style={{marginBottom:14,padding:"10px 14px",borderRadius:4,display:"flex",alignItems:"center",gap:10,
       background:!label?"#0d1a0f":drift>0?"#1a0d00":"#001a1a",
       border:`1px solid ${!label?"#1A6B3A44":drift>0?"#e67e2244":"#4ECDC433"}`}}>
       <span style={{fontSize:10,color:!label?"#1A6B3A":drift>0?"#e67e22":"#4ECDC4",fontWeight:600}}>
@@ -350,10 +350,10 @@ function DriftBalk({ items, uur }) {
 // ════════════════════════════════════════════════════════════
 function EF({ label, value, onChange, multiline=false, placeholder="" }) {
   const s={width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",
-    color:"#e0e0e0",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
+    color:"#e0e0e0",padding:"9px 12px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",lineHeight:"1.5",
     borderRadius:3,boxSizing:"border-box",resize:"vertical"};
   return (
-    <div style={{marginBottom:5}}>
+    <div style={{marginBottom:8}}>
       {label&&<div style={{fontSize:10,letterSpacing:1,color:"#888",textTransform:"uppercase",marginBottom:3,fontWeight:600}}>{label}</div>}
       {multiline
         ? <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:50}}/>
@@ -379,7 +379,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast
   return (
     <div style={{display:"flex",opacity:dimmed?0.25:1,transition:"opacity 0.4s",
       outline:isActive?`2px solid ${tc.color}`:"none",outlineOffset:2,
-      borderRadius:4,marginBottom:2,background:isActive?`${tc.color}10`:"transparent"}}>
+      borderRadius:6,marginBottom:4,background:isActive?`${tc.color}10`:"transparent"}}>
 
       <div style={{width:64,flexShrink:0,paddingTop:12,textAlign:"right",paddingRight:14}}>
         <div style={{fontSize:13,fontFamily:"'IBM Plex Mono',monospace",fontWeight:isActive?700:500,
@@ -392,13 +392,13 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast
 
       <div style={{width:4,flexShrink:0,background:tc.color,borderRadius:"2px 0 0 2px",margin:"4px 0"}}/>
 
-      <div style={{flex:1,background:"#161820",borderRadius:"0 6px 6px 0",padding:"10px 14px",margin:"3px 0",border:"1px solid #1e2028",borderLeft:"none"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:canEdit?5:0}}>
+      <div style={{flex:1,background:"#161820",borderRadius:"0 6px 6px 0",padding:"14px 16px",margin:"4px 0",border:"1px solid #1e2028",borderLeft:"none"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:canEdit?10:0,paddingBottom:canEdit?8:0,borderBottom:canEdit?"1px solid #1e2028":"none"}}>
           <span style={{fontSize:10,letterSpacing:1,color:tc.color,fontWeight:700}}>{tc.icon} {tc.label}</span>
           <span style={{fontSize:14,color:"#f0f0f0",fontWeight:600}}>{item.what}</span>
-          <div style={{marginLeft:"auto",display:"flex",gap:4}}>
+          <div style={{marginLeft:"auto",display:"flex",gap:6}}>
             {item.who.map(w=>(
-              <span key={w} style={{fontSize:9,padding:"1px 6px",borderRadius:10,
+              <span key={w} style={{fontSize:10,padding:"3px 8px",borderRadius:10,
                 background:`${roleColors[w]||"#555"}15`,color:roleColors[w]||"#888",
                 border:`1px solid ${roleColors[w]||"#555"}28`}}>{w}</span>
             ))}
@@ -553,7 +553,7 @@ export default function App() {
       <div style={{background:"#0d0f14",borderBottom:"2px solid #1e2028",padding:"0 20px",display:"flex",alignItems:"center",height:60,gap:16}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{
-            background:"linear-gradient(135deg, #E91E8C, #7B2D8B)",
+            background:"linear-gradient(135deg, #FF00E7, #6A0DAD)",
             borderRadius:8,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",
             fontWeight:900,fontSize:14,color:"#fff",fontFamily:"'Inter',sans-serif",letterSpacing:-0.5
           }}>MA</div>
@@ -603,8 +603,8 @@ export default function App() {
             {[{id:1,l:"UUR 1",s:"12:00 – 13:00"},{id:2,l:"UUR 2",s:"13:00 – 14:00"},{id:3,l:"GASTEN",s:""},{id:4,l:"REDACTIE",s:""}].map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)} style={{width:"100%",textAlign:"left",padding:"9px 16px",
                 background:tab===t.id?"#161820":"transparent",border:"none",
-                borderLeft:`3px solid ${tab===t.id?"#E91E8C":"transparent"}`,
-                color:tab===t.id?"#fff":"#666",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400}}>
+                borderLeft:`3px solid ${tab===t.id?"#FF00E7":"transparent"}`,
+                color:tab===t.id?"#fff":"#666",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400,padding:"12px 16px"}}>
                 <div style={{fontWeight:700}}>{t.l}</div>
                 {t.s&&<div style={{fontSize:9,color:tab===t.id?"#484848":"#303030",marginTop:1}}>{t.s}</div>}
               </button>
@@ -622,7 +622,7 @@ export default function App() {
         </div>
 
         {/* ── Inhoud ── */}
-        <div style={{flex:1,overflowY:"auto",padding:"16px 24px",background:"#111318"}}>
+        <div style={{flex:1,overflowY:"auto",padding:"20px 28px",background:"#111318"}}>
           <SetupBanner onUrl={url=>{ /* In productie: herladen met nieuwe URL */ alert("Kopieer de URL naar de API_URL variabele bovenin het bestand en laad de app opnieuw."); }}/>
 
           {(tab===1||tab===2)&&<>
@@ -630,11 +630,11 @@ export default function App() {
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                 <span style={{fontSize:9,color:"#3a3a3a",letterSpacing:2}}>UUR {tab} — {tab===1?"12:00":"13:00"} t/m {tab===1?"13:00":"14:00"}</span>
                 <span style={{fontSize:9,color:"#FF6B35"}}>
-                  {curSec>=(tab===1?43200:46800)&&curSec<(tab===1?46800:50400)?<span style={{color:"#E91E8C",fontWeight:700}}>{`▶ LIVE ${curStr}`}</span>:""}
+                  {curSec>=(tab===1?43200:46800)&&curSec<(tab===1?46800:50400)?<span style={{color:"#FF00E7",fontWeight:700}}>{`▶ LIVE ${curStr}`}</span>:""}
                 </span>
               </div>
               <div style={{height:2,background:"#181818",borderRadius:2}}>
-                <div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg, #E91E8C, #7B2D8B)",transition:"width 1s linear",width:`${pct(tab)}%`}}/>
+                <div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg, #FF00E7, #6A0DAD)",transition:"width 1s linear",width:`${pct(tab)}%`}}/>
               </div>
             </div>
             <DriftBalk items={rundown} uur={tab}/>
@@ -696,7 +696,7 @@ function GastenTab({ uitzendingId, setSyncStatus }) {
             onClick={()=>toggle(g.id)}>
             <div style={{
               width:32,height:32,borderRadius:"50%",flexShrink:0,
-              background:"linear-gradient(135deg, #E91E8C, #7B2D8B)",
+              background:"linear-gradient(135deg, #FF00E7, #6A0DAD)",
               display:"flex",alignItems:"center",justifyContent:"center",
               fontSize:13,fontWeight:700,color:"#fff"
             }}>{i+1}</div>
