@@ -21,7 +21,7 @@ const roleColors = {
 };
 const typeConfig = {
   muziek:    { label:"MUZIEK",    color:"#1565C0", icon:"♪",  bg:"#EBF3FF" },
-  jingle:    { label:"JINGLE",    color:"#546E7A", icon:"▶",  bg:"#F1F3F5" },
+  jingle:    { label:"JINGLE",    color:"#C62828", icon:"▶",  bg:"#FFEBEE" },
   tekst:     { label:"TEKST",     color:"#CC00BB", icon:"✎",  bg:"#FFF0FD" },
   nieuws:    { label:"NIEUWS",    color:"#2E7D32", icon:"📰", bg:"#F0FAF0" },
   interview: { label:"INTERVIEW", color:"#E64A19", icon:"🎙", bg:"#FFF3EE" },
@@ -480,7 +480,7 @@ const whoVis = {
   Host:          ["Host","Eindredactie"],
   Techniek:      ["Techniek","Eindredactie"],
   Nieuwsredactie:["Nieuwsredactie","Eindredactie"],
-  Muziekredactie:["Muziekredactie","Techniek","Eindredactie"],
+  Muziekredactie:["Muziekredactie","Eindredactie"],
 };
 
 function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast }) {
@@ -585,7 +585,7 @@ export default function App() {
   const [tab, setTab] = useState(1);
   const [now, setNow] = useState(new Date());
   const [simTime, setSimTime] = useState("12:00");
-  const [useSim, setUseSim] = useState(false);
+  const [useSim, setUseSim] = useState(true);
   const [zoekOpen, setZoekOpen] = useState(false);
   const [zoekId, setZoekId] = useState(null);
   const [spotifyToken, setSpotifyToken] = useState("");
