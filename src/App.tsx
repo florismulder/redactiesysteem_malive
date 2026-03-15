@@ -407,7 +407,7 @@ function DuurInvoer({ item, onChange, onZoek }) {
         placeholder="m:ss"
         style={{width:60,background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,
           padding:"4px 8px",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",borderRadius:4,textAlign:"center"}}/>
-      <span style={{fontSize:11,color:"#374151"}}>gepland: {toMMSS(item.duurGeplandSec)}</span>
+      <span style={{fontSize:11,color:"#2D3444",fontWeight:500}}>gepland: {toMMSS(item.duurGeplandSec)}</span>
       {Math.abs(drift)>3 && (
         <span style={{fontSize:11,fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",
           color:drift>0?"#D97706":"#059669",
@@ -458,12 +458,12 @@ function DriftBalk({ items, uur, startTijd }) {
 // ════════════════════════════════════════════════════════════
 function EF({ label, value, onChange, multiline=false, placeholder="" }) {
   const s={width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,
-    color:T.text,padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
+    color:"#0A0C10",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
     lineHeight:"1.5",borderRadius:4,boxSizing:"border-box",resize:"vertical",
     outline:"none"};const ph={color:"#6B7280"};
   return (
     <div style={{marginBottom:8}}>
-      {label&&<div style={{fontSize:10,letterSpacing:1,color:T.textMuted,textTransform:"uppercase",marginBottom:5,fontWeight:600}}>{label}</div>}
+      {label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}
       {multiline
         ? <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:56}}/>
         : <input type="text" value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={s}/>
@@ -502,16 +502,16 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast
           {item.timeBerekend||item.time}
         </div>
         {tidAfwijkt&&<div style={{fontSize:9,color:T.textLight,textDecoration:"line-through",lineHeight:1.2}}>{item.time}</div>}
-        <div style={{fontSize:9,color:"#374151",marginTop:1}}>{toMMSS(item.duurWerkelijkSec)}</div>
+        <div style={{fontSize:9,color:"#2D3444",marginTop:1,fontWeight:500}}>{toMMSS(item.duurWerkelijkSec)}</div>
       </div>
 
       <div style={{width:3,flexShrink:0,background:tc.color,borderRadius:"2px 0 0 2px",alignSelf:"stretch",marginTop:4,marginBottom:4}}/>
 
-      <div style={{flex:1,background:T.bgCard,borderRadius:"0 6px 6px 0",padding:"10px 14px",
-        border:`1px solid ${T.border}`,borderLeft:"none",marginTop:4,marginBottom:4,
-        boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+      <div style={{flex:1,background:"#FFFFFF",borderRadius:"0 6px 6px 0",padding:"10px 14px",
+        border:"1px solid #B0B8C4",borderLeft:"none",marginTop:4,marginBottom:4,
+        boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:canEdit?8:0,
-          paddingBottom:canEdit?7:0,borderBottom:canEdit?`1px solid ${T.border}`:"none"}}>
+          paddingBottom:canEdit?7:0,borderBottom:canEdit?"1px solid #B0B8C4":"none"}}>
           <span style={{fontSize:10,letterSpacing:1,color:tc.color,fontWeight:700,
             background:`${tc.color}15`,padding:"2px 7px",borderRadius:4}}>{tc.icon} {tc.label}</span>
           <span style={{fontSize:13,color:"#0D0F12",fontWeight:600}}>{item.what}</span>
@@ -534,7 +534,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast
             <DuurInvoer item={item} onChange={onDuurChange} onZoek={()=>onZoek(item.id)}/>
           </>}
           {item.type==="tekst"&&<EF label="Presentatietekst" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Voer tekst in…"/>}
-          {item.type==="jingle"&&<div style={{fontSize:12,color:"#374151",fontStyle:"italic",padding:"4px 0"}}>{item.extra.label}</div>}
+          {item.type==="jingle"&&<div style={{fontSize:12,color:"#2D3444",fontStyle:"italic",fontWeight:500,padding:"4px 0"}}>{item.extra.label}</div>}
           {item.type==="nieuws"&&<>
             <EF label="Intro" value={item.extra.intro} onChange={v=>upd("intro",v)} placeholder="Spreektekst intro…"/>
             <EF label="Berichten" value={item.extra.berichten} onChange={v=>upd("berichten",v)} multiline placeholder="Voer nieuwsberichten in…"/>
@@ -688,7 +688,7 @@ export default function App() {
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
       <style>{`
-        input::placeholder, textarea::placeholder { color: #6B7280 !important; }
+        input::placeholder, textarea::placeholder { color: #555E6E !important; font-style: italic; }
         input:not([value=""]), textarea:not(:empty) { color: #1A1D23; }
       `}</style>
 
@@ -728,7 +728,7 @@ export default function App() {
             fontSize:11,cursor:"pointer",fontWeight:role===r?600:400,transition:"all 0.15s",
             borderColor:role===r?roleColors[r]:T.border,
             background:role===r?`${roleColors[r]}15`:T.bg,
-            color:role===r?roleColors[r]:"#1F2937"}}>{r}</button>
+            color:role===r?roleColors[r]:"#1A1F2B",fontWeight:role===r?600:500}}>{r}</button>
         ))}
         <div style={{flex:1}}/>
         <span style={{fontSize:10,color:"#1F2937",letterSpacing:1,fontWeight:500}}>SIM</span>
@@ -753,7 +753,7 @@ export default function App() {
               <button key={t.id} onClick={()=>setTab(t.id)} style={{width:"100%",textAlign:"left",padding:"10px 16px",
                 background:tab===t.id?"#F9FAFB":"transparent",border:"none",
                 borderLeft:`3px solid ${tab===t.id?BRAND.roze:"transparent"}`,
-                color:tab===t.id?T.text:"#1F2937",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400}}>
+                color:tab===t.id?"#0A0C10":"#1A1F2B",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400}}>
                 <div>{t.l}</div>
                 {t.s&&<div style={{fontSize:10,color:T.textLight,marginTop:1}}>{t.s}</div>}
               </button>
@@ -764,7 +764,7 @@ export default function App() {
             {Object.entries(typeConfig).map(([k,v])=>(
               <div key={k} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
                 <div style={{width:3,height:11,background:v.color,borderRadius:2}}/>
-                <span style={{fontSize:11,color:"#1F2937"}}>{v.label}</span>
+                <span style={{fontSize:11,color:"#1A1F2B",fontWeight:500}}>{v.label}</span>
               </div>
             ))}
           </div>
