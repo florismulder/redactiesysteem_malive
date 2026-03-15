@@ -615,9 +615,12 @@ export default function App() {
         setRundown(prev=>herbereken(prev.map(item=>{
           const saved = res.data[item.id];
           if (!saved) return item;
-          return { ...item, extra:{...item.extra,...saved.extra},
-            duurWerkelijkSec:saved.duurWerkelijkSec||item.duurWerkelijkSec,
-            spotifyUri:saved.spotifyUri||item.spotifyUri };
+          // saved IS the extra object (Apps Script stores extra directly)
+          const extra = saved.extra || saved;
+          return { ...item,
+            extra:{...item.extra,...extra},
+            duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec,
+            spotifyUri:saved.spotifyUri||extra.spotifyUri||item.spotifyUri };
         }), startTijd));
         setSyncStatus("ok");
       } else setSyncStatus("fout");
