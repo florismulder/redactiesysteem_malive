@@ -37,8 +37,8 @@ const T = {
   border:     "#E0E3E8",
   borderDark: "#C8CDD5",
   text:       "#1A1D23",
-  textMuted:  "#6B7280",
-  textLight:  "#9CA3AF",
+  textMuted:  "#4B5563",
+  textLight:  "#6B7280",
   inputBg:    "#F9FAFB",
   inputBorder:"#D1D5DB",
 };
@@ -297,9 +297,10 @@ function ZoekModal({ open, onClose, onSelect, spotifyToken }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [bron, setBron] = useState(spotifyToken ? "spotify" : "musicbrainz");
+  const [bron, setBron] = useState(spotifyToken ? "spotify" : "itunes");
 
   useEffect(()=>{ if(open){setQ("");setResults([]);} },[open]);
+  useEffect(()=>{ if(spotifyToken) setBron("spotify"); },[spotifyToken]);
 
   async function zoek() {
     if (!q.trim()) return;
@@ -316,12 +317,14 @@ function ZoekModal({ open, onClose, onSelect, spotifyToken }) {
           cover:t.album.images?.[2]?.url, uri:t.uri,
         })));
       } else {
-        const r = await fetch(`https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(q)}&limit=8&fmt=json`);
+        // iTunes Search API — gratis, geen account nodig
+        const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=10&lang=nl_nl`);
         const d = await r.json();
-        setResults((d.recordings||[]).filter(r=>r.length).map(t=>({
-          id:t.id, artiest:t["artist-credit"]?.[0]?.artist?.name||"Onbekend",
-          nummer:t.title, album:t.releases?.[0]?.title||"",
-          duurSec:Math.round((t.length||0)/1000), cover:null, uri:null,
+        setResults((d.results||[]).map(t=>({
+          id:t.trackId, artiest:t.artistName,
+          nummer:t.trackName, album:t.collectionName,
+          duurSec:Math.round((t.trackTimeMillis||0)/1000),
+          cover:t.artworkUrl60, uri:null,
         })));
       }
     } catch { setResults([{fout:true}]); }
@@ -337,14 +340,14 @@ function ZoekModal({ open, onClose, onSelect, spotifyToken }) {
         <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
           <span style={{fontSize:14,fontWeight:700,color:T.text}}>Zoek nummer</span>
           <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
-            {["musicbrainz","spotify"].map(b=>(
+            {["itunes","spotify"].map(b=>(
               <button key={b} onClick={()=>setBron(b)} style={{
                 padding:"4px 12px",fontSize:11,borderRadius:20,cursor:"pointer",
                 background:bron===b?"#F3F4F6":"transparent",
                 border:`1px solid ${bron===b?T.borderDark:T.border}`,
                 color:bron===b?T.text:T.textMuted,
                 opacity:b==="spotify"&&!spotifyToken?0.4:1,
-              }}>{b==="spotify"?"🎧 Spotify":"🎵 MusicBrainz"}</button>
+              }}>{b==="spotify"?"🎧 Spotify":"🎵 iTunes"}</button>
             ))}
           </div>
         </div>
@@ -404,7 +407,7 @@ function DuurInvoer({ item, onChange, onZoek }) {
         placeholder="m:ss"
         style={{width:60,background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,
           padding:"4px 8px",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",borderRadius:4,textAlign:"center"}}/>
-      <span style={{fontSize:11,color:T.textLight}}>gepland: {toMMSS(item.duurGeplandSec)}</span>
+      <span style={{fontSize:11,color:"#6B7280"}}>gepland: {toMMSS(item.duurGeplandSec)}</span>
       {Math.abs(drift)>3 && (
         <span style={{fontSize:11,fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",
           color:drift>0?"#D97706":"#059669",
@@ -457,7 +460,7 @@ function EF({ label, value, onChange, multiline=false, placeholder="" }) {
   const s={width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,
     color:T.text,padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
     lineHeight:"1.5",borderRadius:4,boxSizing:"border-box",resize:"vertical",
-    outline:"none"};
+    outline:"none"};const ph={color:"#9CA3AF"};
   return (
     <div style={{marginBottom:8}}>
       {label&&<div style={{fontSize:10,letterSpacing:1,color:T.textMuted,textTransform:"uppercase",marginBottom:5,fontWeight:600}}>{label}</div>}
@@ -495,11 +498,11 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast
 
       <div style={{width:56,flexShrink:0,paddingTop:12,textAlign:"right",paddingRight:10}}>
         <div style={{fontSize:12,fontFamily:"'IBM Plex Mono',monospace",fontWeight:isActive?700:500,
-          color:isActive?tc.color:tidAfwijkt?"#D97706":T.textMuted}}>
+          color:isActive?tc.color:tidAfwijkt?"#D97706":"#6B7280"}}>
           {item.timeBerekend||item.time}
         </div>
         {tidAfwijkt&&<div style={{fontSize:9,color:T.textLight,textDecoration:"line-through",lineHeight:1.2}}>{item.time}</div>}
-        <div style={{fontSize:9,color:T.textLight,marginTop:1}}>{toMMSS(item.duurWerkelijkSec)}</div>
+        <div style={{fontSize:9,color:"#6B7280",marginTop:1}}>{toMMSS(item.duurWerkelijkSec)}</div>
       </div>
 
       <div style={{width:3,flexShrink:0,background:tc.color,borderRadius:"2px 0 0 2px",alignSelf:"stretch",marginTop:4,marginBottom:4}}/>
@@ -531,7 +534,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast
             <DuurInvoer item={item} onChange={onDuurChange} onZoek={()=>onZoek(item.id)}/>
           </>}
           {item.type==="tekst"&&<EF label="Presentatietekst" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Voer tekst in…"/>}
-          {item.type==="jingle"&&<div style={{fontSize:12,color:T.textLight,fontStyle:"italic",padding:"4px 0"}}>{item.extra.label}</div>}
+          {item.type==="jingle"&&<div style={{fontSize:12,color:"#6B7280",fontStyle:"italic",padding:"4px 0"}}>{item.extra.label}</div>}
           {item.type==="nieuws"&&<>
             <EF label="Intro" value={item.extra.intro} onChange={v=>upd("intro",v)} placeholder="Spreektekst intro…"/>
             <EF label="Berichten" value={item.extra.berichten} onChange={v=>upd("berichten",v)} multiline placeholder="Voer nieuwsberichten in…"/>
@@ -684,6 +687,10 @@ export default function App() {
   return (
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+      <style>{`
+        input::placeholder, textarea::placeholder { color: #9CA3AF !important; }
+        input:not([value=""]), textarea:not(:empty) { color: #1A1D23; }
+      `}</style>
 
       {/* Header */}
       <div style={{background:T.bgHeader,borderBottom:`1px solid ${T.border}`,padding:"0 20px",display:"flex",alignItems:"center",height:56,gap:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
@@ -721,15 +728,15 @@ export default function App() {
             fontSize:11,cursor:"pointer",fontWeight:role===r?600:400,transition:"all 0.15s",
             borderColor:role===r?roleColors[r]:T.border,
             background:role===r?`${roleColors[r]}15`:T.bg,
-            color:role===r?roleColors[r]:T.textMuted}}>{r}</button>
+            color:role===r?roleColors[r]:"#4B5563"}}>{r}</button>
         ))}
         <div style={{flex:1}}/>
-        <span style={{fontSize:10,color:T.textMuted,letterSpacing:1}}>SIM</span>
+        <span style={{fontSize:10,color:"#4B5563",letterSpacing:1,fontWeight:500}}>SIM</span>
         <input type="time" value={simTime} onChange={e=>setSimTime(e.target.value)}
           style={{background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"3px 8px",fontSize:11,borderRadius:4}}/>
         <button onClick={()=>setUseSim(s=>!s)} style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,
           background:useSim?`${BRAND.roze}15`:T.bg,border:`1px solid ${useSim?BRAND.roze:T.border}`,
-          color:useSim?BRAND.roze:T.textMuted}}>{useSim?"SIM AAN":"SIM UIT"}</button>
+          color:useSim?BRAND.roze:"#4B5563"}}>{useSim?"SIM AAN":"SIM UIT"}</button>
         <button onClick={()=>setSpotifyToken(t=>t?"":prompt("Plak je Spotify access token:")||"")}
           style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,
             background:spotifyToken?"#DCFCE7":T.bg,border:`1px solid ${spotifyToken?"#86EFAC":T.border}`,
@@ -746,7 +753,7 @@ export default function App() {
               <button key={t.id} onClick={()=>setTab(t.id)} style={{width:"100%",textAlign:"left",padding:"10px 16px",
                 background:tab===t.id?"#F9FAFB":"transparent",border:"none",
                 borderLeft:`3px solid ${tab===t.id?BRAND.roze:"transparent"}`,
-                color:tab===t.id?T.text:T.textMuted,cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400}}>
+                color:tab===t.id?T.text:"#4B5563",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400}}>
                 <div>{t.l}</div>
                 {t.s&&<div style={{fontSize:10,color:T.textLight,marginTop:1}}>{t.s}</div>}
               </button>
@@ -757,7 +764,7 @@ export default function App() {
             {Object.entries(typeConfig).map(([k,v])=>(
               <div key={k} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
                 <div style={{width:3,height:11,background:v.color,borderRadius:2}}/>
-                <span style={{fontSize:11,color:T.textMuted}}>{v.label}</span>
+                <span style={{fontSize:11,color:"#4B5563"}}>{v.label}</span>
               </div>
             ))}
           </div>
