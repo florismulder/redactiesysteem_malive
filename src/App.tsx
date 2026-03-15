@@ -20,12 +20,12 @@ const roleColors = {
   Muziekredactie: "#6A0DAD",
 };
 const typeConfig = {
-  muziek:    { label:"MUZIEK",    color:"#6A0DAD", icon:"♪",  bg:"#F3EEFF" },
+  muziek:    { label:"MUZIEK",    color:"#1565C0", icon:"♪",  bg:"#EBF3FF" },
   jingle:    { label:"JINGLE",    color:"#546E7A", icon:"▶",  bg:"#F1F3F5" },
   tekst:     { label:"TEKST",     color:"#CC00BB", icon:"✎",  bg:"#FFF0FD" },
   nieuws:    { label:"NIEUWS",    color:"#2E7D32", icon:"📰", bg:"#F0FAF0" },
   interview: { label:"INTERVIEW", color:"#E64A19", icon:"🎙", bg:"#FFF3EE" },
-  special:   { label:"SPECIAL",  color:"#1565C0", icon:"★",  bg:"#EEF4FF" },
+  special:   { label:"SPECIAL",  color:"#00796B", icon:"★",  bg:"#E8F5F3" },
 };
 
 // ─── thema kleuren ────────────────────────────────────────
