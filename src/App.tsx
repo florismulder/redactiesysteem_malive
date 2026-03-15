@@ -20,12 +20,12 @@ const roleColors = {
   Muziekredactie: "#6A0DAD",
 };
 const typeConfig = {
-  muziek:    { label:"MUZIEK",    color:"#6A0DAD", icon:"♪" },
-  jingle:    { label:"JINGLE",    color:"#90A4AE", icon:"▶" },
-  tekst:     { label:"TEKST",     color:"#CC00BB", icon:"✎" },
-  nieuws:    { label:"NIEUWS",    color:"#2E7D32", icon:"📰" },
-  interview: { label:"INTERVIEW", color:"#E64A19", icon:"🎙" },
-  special:   { label:"SPECIAL",  color:"#1565C0", icon:"★"  },
+  muziek:    { label:"MUZIEK",    color:"#6A0DAD", icon:"♪",  bg:"#F3EEFF" },
+  jingle:    { label:"JINGLE",    color:"#546E7A", icon:"▶",  bg:"#F1F3F5" },
+  tekst:     { label:"TEKST",     color:"#CC00BB", icon:"✎",  bg:"#FFF0FD" },
+  nieuws:    { label:"NIEUWS",    color:"#2E7D32", icon:"📰", bg:"#F0FAF0" },
+  interview: { label:"INTERVIEW", color:"#E64A19", icon:"🎙", bg:"#FFF3EE" },
+  special:   { label:"SPECIAL",  color:"#1565C0", icon:"★",  bg:"#EEF4FF" },
 };
 
 // ─── thema kleuren ────────────────────────────────────────
@@ -507,11 +507,11 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast
 
       <div style={{width:3,flexShrink:0,background:tc.color,borderRadius:"2px 0 0 2px",alignSelf:"stretch",marginTop:4,marginBottom:4}}/>
 
-      <div style={{flex:1,background:"#FFFFFF",borderRadius:"0 6px 6px 0",padding:"10px 14px",
-        border:"1px solid #B0B8C4",borderLeft:"none",marginTop:4,marginBottom:4,
-        boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
+      <div style={{flex:1,background:tc.bg,borderRadius:"0 6px 6px 0",padding:"10px 14px",
+        border:`1px solid ${tc.color}33`,borderLeft:"none",marginTop:4,marginBottom:4,
+        boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:canEdit?8:0,
-          paddingBottom:canEdit?7:0,borderBottom:canEdit?"1px solid #B0B8C4":"none"}}>
+          paddingBottom:canEdit?7:0,borderBottom:canEdit?`1px solid ${tc.color}33`:"none"}}>
           <span style={{fontSize:10,letterSpacing:1,color:tc.color,fontWeight:700,
             background:`${tc.color}15`,padding:"2px 7px",borderRadius:4}}>{tc.icon} {tc.label}</span>
           <span style={{fontSize:13,color:"#0D0F12",fontWeight:600}}>{item.what}</span>
