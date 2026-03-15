@@ -354,7 +354,7 @@ function EF({ label, value, onChange, multiline=false, placeholder="" }) {
     borderRadius:3,boxSizing:"border-box",resize:"vertical"};
   return (
     <div style={{marginBottom:8}}>
-      {label&&<div style={{fontSize:10,letterSpacing:1,color:"#888",textTransform:"uppercase",marginBottom:3,fontWeight:600}}>{label}</div>}
+      {label&&<div style={{fontSize:10,letterSpacing:1,color:"#888",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>{label}</div>}
       {multiline
         ? <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:50}}/>
         : <input type="text" value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={s}/>
@@ -377,11 +377,11 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast
   const tidAfwijkt = item.timeBerekend && item.timeBerekend!==item.time;
 
   return (
-    <div style={{display:"flex",opacity:dimmed?0.25:1,transition:"opacity 0.4s",
+    <div style={{display:"flex",alignItems:"flex-start",opacity:dimmed?0.25:1,transition:"opacity 0.4s",
       outline:isActive?`2px solid ${tc.color}`:"none",outlineOffset:2,
       borderRadius:6,marginBottom:4,background:isActive?`${tc.color}10`:"transparent"}}>
 
-      <div style={{width:64,flexShrink:0,paddingTop:12,textAlign:"right",paddingRight:14}}>
+      <div style={{width:64,flexShrink:0,paddingTop:14,textAlign:"right",paddingRight:14}}>
         <div style={{fontSize:13,fontFamily:"'IBM Plex Mono',monospace",fontWeight:isActive?700:500,
           color:isActive?"#fff":tidAfwijkt?"#e67e22":"#505050"}}>
           {item.timeBerekend||item.time}
@@ -390,7 +390,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast
         <div style={{fontSize:9,color:"#2e2e2e",marginTop:1}}>{toMMSS(item.duurWerkelijkSec)}</div>
       </div>
 
-      <div style={{width:4,flexShrink:0,background:tc.color,borderRadius:"2px 0 0 2px",margin:"4px 0"}}/>
+      <div style={{width:4,flexShrink:0,background:tc.color,borderRadius:"2px 0 0 2px",alignSelf:"stretch"}}/>
 
       <div style={{flex:1,background:"#161820",borderRadius:"0 6px 6px 0",padding:"14px 16px",margin:"4px 0",border:"1px solid #1e2028",borderLeft:"none"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:canEdit?10:0,paddingBottom:canEdit?8:0,borderBottom:canEdit?"1px solid #1e2028":"none"}}>
