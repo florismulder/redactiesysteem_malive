@@ -46,8 +46,19 @@ const T = {
 // ─── helpers ──────────────────────────────────────────────
 const toSec = s => { if (!s) return 0; const p = s.toString().split(":"); return p.length===1 ? parseInt(p[0])*60 : parseInt(p[0])*60+parseInt(p[1]||0); };
 const toMMSS = s => { if (!s) return ""; return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; };
-const addSec = (t, s) => { const [h,m]=t.split(":").map(Number); const tot=h*3600+m*60+Math.round(s); return `${String(Math.floor(tot/3600)).padStart(2,"0")}:${String(Math.floor((tot%3600)/60)).padStart(2,"0")}`; };
-const timeToSec = t => { const [h,m]=t.split(":").map(Number); return h*3600+m*60; };
+const addSec = (t, s) => { const clean=cleanTime(t); const [h,m]=clean.split(":").map(Number); const tot=h*3600+m*60+Math.round(s); return `${String(Math.floor(tot/3600)).padStart(2,"0")}:${String(Math.floor((tot%3600)/60)).padStart(2,"0")}`; };
+const timeToSec = t => { const clean=cleanTime(t); const [h,m]=clean.split(":").map(Number); return h*3600+m*60; };
+// Handles "12:00", "Sat Dec 30 1899 12:00:00 GMT+0000", full ISO strings etc.
+function cleanTime(t) {
+  if (!t) return "12:00";
+  const s = String(t);
+  // Already HH:MM format
+  if (/^\d{1,2}:\d{2}$/.test(s)) return s;
+  // Try to extract HH:MM from a full date string
+  const match = s.match(/(\d{1,2}):(\d{2})(?::\d{2})?/);
+  if (match) return `${match[1].padStart(2,"0")}:${match[2]}`;
+  return "12:00";
+}
 
 const dagNamen = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
 const maandNamen = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
@@ -249,7 +260,7 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose }) {
               <div style={{flex:1}}>
                 <div style={{fontSize:14,fontWeight:600,color:T.text}}>{u.naam && u.naam!=="undefined" ? u.naam : formatDatum(u.datum)}</div>
                 <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>
-                  {formatDatum(u.datum)} · {(u.startTijd&&u.startTijd!=="undefined")?u.startTijd:"12:00"} – {(u.eindTijd&&u.eindTijd!=="undefined")?u.eindTijd:"14:00"}
+                  {formatDatum(u.datum)} · {cleanTime(u.startTijd||"12:00")} – {cleanTime(u.eindTijd||"14:00")}
                 </div>
               </div>
               <div style={{fontSize:12,color:BRAND.roze,fontWeight:600}}>Laden →</div>
@@ -616,7 +627,13 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, isActi
             </div>
             <DuurInvoer item={item} onChange={onDuurChange} onZoek={()=>onZoek(item.id)}/>
           </>}
-          {item.type==="tekst"&&<EF label="Presentatietekst" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Voer tekst in…"/>}
+          {item.type==="tekst"&&<EF label="Presentatietekst" value={item.extra.tekst} onChange={v=>{
+            upd("tekst",v);
+            // Automatisch duur berekenen op basis van woordtelling (130 woorden/min)
+            const woorden = v.trim().split(/\s+/).filter(Boolean).length;
+            const sec = Math.max(10, Math.ceil(woorden / 130 * 60));
+            onDuurChange(item.id, sec);
+          }} multiline placeholder="Voer tekst in…"/>}
           {item.type==="jingle"&&<div style={{fontSize:12,color:"#2D3444",fontStyle:"italic",fontWeight:500,padding:"4px 0"}}>{item.extra.label}</div>}
           {item.type==="nieuws"&&<>
             <EF label="Intro" value={item.extra.intro} onChange={v=>upd("intro",v)} placeholder="Spreektekst intro…"/>
@@ -713,8 +730,8 @@ export default function App() {
   const [spotifyToken, setSpotifyToken] = useState("");
   const [syncStatus, setSyncStatus] = useState(API_KLAAR ? "laden" : "lokaal");
 
-  const startTijd = actieveUitzending?.startTijd || "12:00";
-  const eindTijd = actieveUitzending?.eindTijd || "14:00";
+  const startTijd = cleanTime(actieveUitzending?.startTijd || "12:00");
+  const eindTijd = cleanTime(actieveUitzending?.eindTijd || "14:00");
 
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
 
@@ -775,7 +792,7 @@ export default function App() {
   function handleSelectUitzending(u) {
     firstLoad.current = true;
     setActieveUitzending(u);
-    setSimTime(u.startTijd || "12:00");
+    setSimTime(cleanTime(u.startTijd || "12:00"));
     setShowUitzendingModal(false);
   }
 
@@ -869,8 +886,8 @@ export default function App() {
             marginLeft:8,padding:"5px 14px",background:T.bg,border:`1px solid ${T.border}`,
             borderRadius:20,cursor:"pointer",display:"flex",alignItems:"center",gap:8,boxShadow:"0 1px 2px rgba(0,0,0,0.05)"
           }}>
-            <span style={{fontSize:12,color:T.text,fontWeight:600}}>{actieveUitzending.naam&&actieveUitzending.naam!=="undefined"?actieveUitzending.naam:formatDatum(actieveUitzending.datum)}</span>
-            <span style={{fontSize:11,color:T.textMuted}}>{startTijd}–{eindTijd}</span>
+            <span style={{fontSize:12,color:T.text,fontWeight:600}}>{actieveUitzending.naam&&actieveUitzending.naam!=="undefined"&&actieveUitzending.naam?actieveUitzending.naam:formatDatum(actieveUitzending.datum)}</span>
+            <span style={{fontSize:11,color:T.textMuted}}>{cleanTime(startTijd)}–{cleanTime(eindTijd)}</span>
             <span style={{fontSize:10,color:BRAND.roze}}>▼</span>
           </button>
         )}
