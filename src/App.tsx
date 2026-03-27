@@ -454,23 +454,87 @@ function DriftBalk({ items, uur, startTijd }) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  EditableField
+//  TekstPopup
 // ════════════════════════════════════════════════════════════
-function EF({ label, value, onChange, multiline=false, placeholder="" }) {
-  const s={width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,
-    color:"#0A0C10",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
-    lineHeight:"1.5",borderRadius:4,boxSizing:"border-box",resize:"vertical",
-    outline:"none"};const ph={color:"#6B7280"};
+function TekstPopup({ open, label, value, onChange, onClose }) {
+  const [voorlees, setVoorlees] = useState(false);
+  if (!open) return null;
   return (
-    <div style={{marginBottom:8}}>
-      {label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}
-      {multiline
-        ? <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:56}}/>
-        : <input type="text" value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={s}/>
-      }
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center"}}
+      onClick={onClose}>
+      <div style={{background:"#fff",borderRadius:12,width:680,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}
+        onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{label}</div>
+          <button onClick={()=>setVoorlees(v=>!v)} style={{
+            padding:"5px 14px",borderRadius:20,border:"1px solid",cursor:"pointer",fontSize:12,fontWeight:600,
+            borderColor:voorlees?BRAND.roze:T.borderDark,
+            background:voorlees?`${BRAND.roze}15`:T.bg,
+            color:voorlees?BRAND.roze:T.textMuted
+          }}>
+            {voorlees ? "📖 Voorlees aan" : "📖 Voorlees uit"}
+          </button>
+          <button onClick={onClose} style={{background:"transparent",border:"none",fontSize:20,cursor:"pointer",color:T.textMuted,marginLeft:4}}>✕</button>
+        </div>
+        <div style={{flex:1,padding:"16px 20px",overflowY:"auto"}}>
+          <textarea
+            value={value||""}
+            onChange={e=>onChange(e.target.value)}
+            autoFocus
+            style={{
+              width:"100%",minHeight:320,
+              background:voorlees?"#FFFDF5":"#fff",
+              border:`1px solid ${T.inputBorder}`,
+              color:T.text,
+              padding:"12px 14px",
+              fontSize: voorlees ? 18 : 13,
+              lineHeight: voorlees ? 2.2 : 1.6,
+              fontFamily: voorlees ? "'Georgia','Times New Roman',serif" : "'IBM Plex Mono',monospace",
+              borderRadius:6,
+              boxSizing:"border-box",
+              resize:"none",
+              outline:"none",
+              transition:"all 0.2s",
+            }}
+          />
+        </div>
+        <div style={{padding:"10px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{fontSize:11,color:T.textMuted}}>{(value||"").trim().split(/\s+/).filter(Boolean).length} woorden</div>
+          <button onClick={onClose} style={{padding:"7px 20px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600}}>
+            Opslaan & sluiten
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
+
+// ════════════════════════════════════════════════════════════
+//  EditableField
+// ════════════════════════════════════════════════════════════
+function EF({ label, value, onChange, multiline=false, placeholder="" }) {
+  const [popupOpen, setPopupOpen] = useState(false);
+  const s={width:"100%",background:"rgba(255,255,255,0.7)",border:"1px solid #9CA3AF",color:"#0A0C10",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
+    lineHeight:"1.5",borderRadius:4,boxSizing:"border-box",resize:"vertical"};
+  return (
+    <div style={{marginBottom:8}}>
+      {label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}
+      {multiline ? (
+        <div style={{position:"relative"}}>
+          <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:56,paddingRight:36}}/>
+          <button onClick={()=>setPopupOpen(true)} title="Groter bewerken"
+            style={{position:"absolute",top:6,right:6,background:"transparent",border:"none",cursor:"pointer",fontSize:14,color:T.textMuted,padding:2}}>
+            ⛶
+          </button>
+          <TekstPopup open={popupOpen} label={label} value={value} onChange={onChange} onClose={()=>setPopupOpen(false)}/>
+        </div>
+      ) : (
+        <input type="text" value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={s}/>
+      )}
+    </div>
+  );
+}
+
 
 // ════════════════════════════════════════════════════════════
 //  ItemCard
@@ -483,7 +547,7 @@ const whoVis = {
   Muziekredactie:["Muziekredactie","Eindredactie"],
 };
 
-function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast }) {
+function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, isActive, isPast }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
   const canEdit = role==="Eindredactie"||item.who.includes(role);
@@ -569,6 +633,45 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, isActive, isPast
           }
         </>}
       </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+//  ToevoegenKnop
+// ════════════════════════════════════════════════════════════
+function ToevoegenKnop({ uur, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const types = [
+    { key:"muziek",    label:"♪ Muziek",    color:typeConfig.muziek.color },
+    { key:"tekst",     label:"✎ Tekst",     color:typeConfig.tekst.color },
+    { key:"nieuws",    label:"📰 Nieuws",   color:typeConfig.nieuws.color },
+    { key:"interview", label:"🎙 Interview", color:typeConfig.interview.color },
+    { key:"jingle",    label:"▶ Jingle",    color:typeConfig.jingle.color },
+    { key:"special",   label:"★ Special",   color:typeConfig.special.color },
+  ];
+  return (
+    <div style={{marginTop:8,marginBottom:8}}>
+      {!open ? (
+        <button onClick={()=>setOpen(true)} style={{
+          width:"100%",padding:"8px",background:"transparent",
+          border:`1px dashed ${T.borderDark}`,color:T.textMuted,
+          borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:500
+        }}>+ Item toevoegen aan uur {uur}</button>
+      ) : (
+        <div style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:8,padding:"12px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}>
+          <div style={{fontSize:11,color:T.textMuted,marginBottom:10,fontWeight:600}}>Kies type item om toe te voegen aan het einde van uur {uur}:</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+            {types.map(t=>(
+              <button key={t.key} onClick={()=>{ onAdd(uur, t.key, "einde"); setOpen(false); }} style={{
+                padding:"5px 14px",borderRadius:20,border:`1px solid ${t.color}44`,
+                background:`${t.color}12`,color:t.color,cursor:"pointer",fontSize:11,fontWeight:600
+              }}>{t.label}</button>
+            ))}
+          </div>
+          <button onClick={()=>setOpen(false)} style={{fontSize:11,color:T.textLight,background:"transparent",border:"none",cursor:"pointer"}}>Annuleer</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -679,6 +782,43 @@ export default function App() {
       ...r, duurWerkelijkSec:track.duurSec||r.duurWerkelijkSec, spotifyUri:track.uri,
       extra:{...r.extra,artiest:track.artiest||r.extra.artiest,nummer:track.nummer||r.extra.nummer},
     }:r),startTijd));
+  }
+
+  function handleDelete(id) {
+    setRundown(prev=>herbereken(prev.filter(r=>r.id!==id),startTijd));
+  }
+
+  function handleAddItem(uur, type, positie) {
+    const typeDefaults = {
+      muziek:    { dur:180, extra:{artiest:"",nummer:"",feitje:""}, who:["Techniek","Muziekredactie"] },
+      tekst:     { dur:60,  extra:{tekst:""},                       who:["Host"] },
+      nieuws:    { dur:300, extra:{intro:"",berichten:""},           who:["Nieuwsredactie"] },
+      interview: { dur:300, extra:{wie:"",tel:"",functie:"",intro:""},who:["Host"] },
+      jingle:    { dur:5,   extra:{label:"Jingle"},                  who:["Techniek"] },
+      special:   { dur:120, extra:{tekst:""},                        who:["Host"] },
+    };
+    const def = typeDefaults[type] || typeDefaults.tekst;
+    const newItem = {
+      id: Date.now(),
+      time: "00:00",
+      type,
+      what: type.charAt(0).toUpperCase() + type.slice(1),
+      who: def.who,
+      extra: def.extra,
+      uur,
+      duurGeplandSec: def.dur,
+      duurWerkelijkSec: def.dur,
+      spotifyUri: null,
+    };
+    setRundown(prev => {
+      const items = [...prev];
+      const uurItems = items.filter(i=>i.uur===uur);
+      const insertAfterIdx = positie === "einde"
+        ? items.lastIndexOf(uurItems[uurItems.length-1])
+        : items.indexOf(uurItems[positie]);
+      items.splice(insertAfterIdx+1, 0, newItem);
+      return herbereken(items, startTijd);
+    });
   }
 
   const items1=rundown.filter(i=>i.uur===1);
@@ -805,9 +945,11 @@ export default function App() {
               <ItemCard key={item.id} item={item} role={role}
                 onUpdate={handleUpdate} onDuurChange={handleDuurChange}
                 onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
+                onDelete={role==="Eindredactie"?handleDelete:null}
                 isActive={getActiveId(tab)===item.id}
                 isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
             ))}
+            {role==="Eindredactie" && <ToevoegenKnop uur={tab} onAdd={handleAddItem}/>}
           </>}
 
           {actieveUitzending && tab===3 && <GastenTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
