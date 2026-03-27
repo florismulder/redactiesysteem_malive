@@ -54,7 +54,19 @@ const maandNamen = ["januari","februari","maart","april","mei","juni","juli","au
 
 function formatDatum(dateStr) {
   if (!dateStr) return "";
-  const d = new Date(dateStr + "T12:00:00");
+  // Handle ISO timestamps (2026-03-15T23:00:00.000Z) and plain dates (2026-03-15)
+  let d;
+  const str = String(dateStr);
+  if (str.includes("T")) {
+    // ISO timestamp — parse as local date by extracting date part
+    const datePart = str.split("T")[0];
+    const [y,m,day] = datePart.split("-").map(Number);
+    d = new Date(y, m-1, day+1); // +1 because Sheets stores date as previous day UTC
+  } else {
+    const [y,m,day] = str.split("-").map(Number);
+    d = new Date(y, m-1, day);
+  }
+  if (isNaN(d.getTime())) return String(dateStr);
   return `${dagNamen[d.getDay()]} ${d.getDate()} ${maandNamen[d.getMonth()]} ${d.getFullYear()}`;
 }
 
@@ -235,9 +247,9 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose }) {
               style={{padding:"14px 24px",cursor:"pointer",display:"flex",alignItems:"center",gap:14,borderBottom:`1px solid ${T.border}`,transition:"background 0.1s"}}>
               <div style={{width:10,height:10,borderRadius:"50%",background:BRAND.gradient,flexShrink:0}}/>
               <div style={{flex:1}}>
-                <div style={{fontSize:14,fontWeight:600,color:T.text}}>{u.naam || formatDatum(u.datum)}</div>
+                <div style={{fontSize:14,fontWeight:600,color:T.text}}>{u.naam && u.naam!=="undefined" ? u.naam : formatDatum(u.datum)}</div>
                 <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>
-                  {formatDatum(u.datum)} · {u.startTijd||"12:00"} – {u.eindTijd||"14:00"}
+                  {formatDatum(u.datum)} · {(u.startTijd&&u.startTijd!=="undefined")?u.startTijd:"12:00"} – {(u.eindTijd&&u.eindTijd!=="undefined")?u.eindTijd:"14:00"}
                 </div>
               </div>
               <div style={{fontSize:12,color:BRAND.roze,fontWeight:600}}>Laden →</div>
@@ -487,7 +499,7 @@ function TekstPopup({ open, label, value, onChange, onClose }) {
               border:`1px solid ${T.inputBorder}`,
               color:T.text,
               padding:"12px 14px",
-              fontSize: voorlees ? 18 : 13,
+              fontSize: voorlees ? 22 : 13,
               lineHeight: voorlees ? 2.2 : 1.6,
               fontFamily: voorlees ? "'Georgia','Times New Roman',serif" : "'IBM Plex Mono',monospace",
               borderRadius:6,
@@ -499,7 +511,12 @@ function TekstPopup({ open, label, value, onChange, onClose }) {
           />
         </div>
         <div style={{padding:"10px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{fontSize:11,color:T.textMuted}}>{(value||"").trim().split(/\s+/).filter(Boolean).length} woorden</div>
+          <div style={{fontSize:11,color:T.textMuted,display:"flex",gap:16}}>
+            <span>{(value||"").trim().split(/\s+/).filter(Boolean).length} woorden</span>
+            <span style={{color:BRAND.paars,fontWeight:600}}>
+              ⏱ ~{Math.ceil((value||"").trim().split(/\s+/).filter(Boolean).length / 130 * 60)} sec spreektijd
+            </span>
+          </div>
           <button onClick={onClose} style={{padding:"7px 20px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600}}>
             Opslaan & sluiten
           </button>
@@ -523,7 +540,9 @@ function EF({ label, value, onChange, multiline=false, placeholder="" }) {
         <div style={{position:"relative"}}>
           <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:56,paddingRight:36}}/>
           <button onClick={()=>setPopupOpen(true)} title="Groter bewerken"
-            style={{position:"absolute",top:6,right:6,background:"transparent",border:"none",cursor:"pointer",fontSize:14,color:T.textMuted,padding:2}}>
+            style={{position:"absolute",top:5,right:5,background:"#fff",border:`1px solid ${T.borderDark}`,cursor:"pointer",
+              fontSize:13,color:BRAND.paars,padding:"2px 6px",borderRadius:4,fontWeight:700,lineHeight:1,
+              boxShadow:"0 1px 3px rgba(0,0,0,0.1)"}}>
             ⛶
           </button>
           <TekstPopup open={popupOpen} label={label} value={value} onChange={onChange} onClose={()=>setPopupOpen(false)}/>
@@ -850,7 +869,7 @@ export default function App() {
             marginLeft:8,padding:"5px 14px",background:T.bg,border:`1px solid ${T.border}`,
             borderRadius:20,cursor:"pointer",display:"flex",alignItems:"center",gap:8,boxShadow:"0 1px 2px rgba(0,0,0,0.05)"
           }}>
-            <span style={{fontSize:12,color:T.text,fontWeight:600}}>{actieveUitzending.naam||formatDatum(actieveUitzending.datum)}</span>
+            <span style={{fontSize:12,color:T.text,fontWeight:600}}>{actieveUitzending.naam&&actieveUitzending.naam!=="undefined"?actieveUitzending.naam:formatDatum(actieveUitzending.datum)}</span>
             <span style={{fontSize:11,color:T.textMuted}}>{startTijd}–{eindTijd}</span>
             <span style={{fontSize:10,color:BRAND.roze}}>▼</span>
           </button>
