@@ -777,10 +777,10 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
   const [showAdd, setShowAdd] = useState(false);
 
   return (
-    <div style={{width:140,flexShrink:0,background:"#F8F9FA",borderLeft:`1px solid ${T.border}`,
+    <div style={{width:340,flexShrink:0,background:"#F8F9FA",borderLeft:`1px solid ${T.border}`,
       display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <div style={{padding:"10px 8px 6px",borderBottom:`1px solid ${T.border}`,
-        fontSize:9,letterSpacing:2,color:T.textMuted,fontWeight:600,textTransform:"uppercase"}}>
+        fontSize:11,letterSpacing:2,color:T.textMuted,fontWeight:600,textTransform:"uppercase"}}>
         UUR {uur} — BLOKKEN
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"6px 6px"}}>
@@ -797,7 +797,7 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
                 setDragIdx(null);setDragOver(null);
               }}
               style={{
-                marginBottom:3,borderRadius:4,padding:"5px 7px",
+                marginBottom:4,borderRadius:6,padding:"8px 10px",
                 background:isActive?tc.color:`${tc.color}22`,
                 border:`1px solid ${tc.color}55`,
                 cursor:"grab",
@@ -806,7 +806,7 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
                 transition:"opacity 0.15s",
               }}>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <span style={{fontSize:10,flex:1,fontWeight:600,
+                <span style={{fontSize:12,flex:1,fontWeight:600,
                   color:isActive?"#fff":tc.color,
                   overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                   {tc.icon} {item.what}
@@ -814,16 +814,16 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
                 <div style={{display:"flex",gap:1,flexShrink:0}}>
                   <button onClick={()=>moveItem(idx,Math.max(0,idx-1))}
                     style={{background:"transparent",border:"none",cursor:"pointer",
-                      fontSize:9,padding:"0 2px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▲</button>
+                      fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▲</button>
                   <button onClick={()=>moveItem(idx,Math.min(uurItems.length-1,idx+1))}
                     style={{background:"transparent",border:"none",cursor:"pointer",
-                      fontSize:9,padding:"0 2px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▼</button>
+                      fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▼</button>
                   <button onClick={()=>onDelete(item.id)}
                     style={{background:"transparent",border:"none",cursor:"pointer",
-                      fontSize:9,padding:"0 2px",color:isActive?"#ffaaaa":"#EF4444",lineHeight:1}}>✕</button>
+                      fontSize:12,padding:"0 3px",color:isActive?"#ffaaaa":"#EF4444",lineHeight:1}}>✕</button>
                 </div>
               </div>
-              <div style={{fontSize:9,color:isActive?"rgba(255,255,255,0.8)":T.textLight,marginTop:1}}>
+              <div style={{fontSize:11,color:isActive?"rgba(255,255,255,0.8)":T.textLight,marginTop:2}}>
                 {item.timeBerekend||item.time} · {item.duurWerkelijkSec<60?item.duurWerkelijkSec+"s":toMMSS(item.duurWerkelijkSec)}
               </div>
             </div>
@@ -836,23 +836,23 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
           <button onClick={()=>setShowAdd(true)} style={{
             width:"100%",padding:"6px",background:"transparent",
             border:`1px dashed ${T.borderDark}`,color:T.textMuted,
-            borderRadius:4,cursor:"pointer",fontSize:10,fontWeight:500}}>
+            borderRadius:4,cursor:"pointer",fontSize:12,fontWeight:500}}>
             + Toevoegen
           </button>
         ) : (
           <div>
-            <div style={{fontSize:9,color:T.textMuted,marginBottom:4,fontWeight:600}}>Type:</div>
+            <div style={{fontSize:11,color:T.textMuted,marginBottom:6,fontWeight:600}}>Type:</div>
             <div style={{display:"flex",flexDirection:"column",gap:3}}>
               {types.map(t=>(
                 <button key={t.key} onClick={()=>{ onAdd(uur, t.key); setShowAdd(false); }} style={{
                   padding:"4px 8px",borderRadius:4,border:`1px solid ${typeConfig[t.key].color}44`,
                   background:`${typeConfig[t.key].color}12`,color:typeConfig[t.key].color,
-                  cursor:"pointer",fontSize:10,fontWeight:600,textAlign:"left"
+                  cursor:"pointer",fontSize:12,fontWeight:600,textAlign:"left",padding:"6px 10px"
                 }}>{t.label}</button>
               ))}
             </div>
             <button onClick={()=>setShowAdd(false)}
-              style={{marginTop:4,fontSize:9,color:T.textLight,background:"transparent",border:"none",cursor:"pointer"}}>
+              style={{marginTop:4,fontSize:11,color:T.textLight,background:"transparent",border:"none",cursor:"pointer"}}>
               Annuleer
             </button>
           </div>
