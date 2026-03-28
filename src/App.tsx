@@ -5,7 +5,9 @@ import React, { useState, useEffect, useRef } from "react";
 //  ⚙️  CONFIGURATIE — vul jouw Apps Script URL in:
 // ════════════════════════════════════════════════════════════
 const API_URL = "https://script.google.com/macros/s/AKfycbz3eJYN5ma_SuPwocnDtI1-XjafTXh7mORZab8XXn2StGkfEecLyDHLR_1bXh8RcP1n/exec";
-const API_KLAAR = !API_U// ─── kleuren (licht thema) ────────────────────────────────
+const API_KLAAR = !API_URL.includes("JOUW_DEPLOYMENT_ID");
+
+// ─── kleuren (licht thema) ────────────────────────────────
 const BRAND = {
   roze: "#FF00E7",
   paars: "#6A0DAD",
@@ -1279,5 +1281,4 @@ function RedactieTab({ uitzendingId, setSyncStatus }) {
       ))}
     </div>
   );
-}RL.includes("JOUW_DEPLOYMENT_ID");
-
+}
