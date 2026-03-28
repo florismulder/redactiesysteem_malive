@@ -107,6 +107,17 @@ function formatDatum(dateStr) {
   return str;
 }
 
+// Geeft een nette naam terug voor een uitzending
+function formatUitzendingNaam(u) {
+  if (!u) return "";
+  const naam = u.naam || "";
+  // Als naam leeg is, "undefined" bevat, of een raw datum-string is → gebruik formatDatum
+  if (!naam || naam === "undefined" || naam.includes("GMT") || naam.includes("00:00:00") || naam.match(/^\w{3} \w{3}/)) {
+    return formatDatum(u.datum);
+  }
+  return naam;
+}
+
 // ─── basisrundown ──────────────────────────────────────────
 const BASE_OFFSETS = [
   { id:1,  offset:0,    dur:180, type:"muziek",    what:"Muziek",                   who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""},            uur:1 },
@@ -777,7 +788,7 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
   const [showAdd, setShowAdd] = useState(false);
 
   return (
-    <div style={{width:380,flexShrink:0,background:"#F8F9FA",borderLeft:`1px solid ${T.border}`,
+    <div style={{width:430,flexShrink:0,background:"#F8F9FA",borderLeft:`1px solid ${T.border}`,
       display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <div style={{padding:"10px 8px 6px",borderBottom:`1px solid ${T.border}`,
         fontSize:11,letterSpacing:2,color:T.textMuted,fontWeight:600,textTransform:"uppercase"}}>
@@ -1040,7 +1051,7 @@ export default function App() {
             marginLeft:8,padding:"5px 14px",background:T.bg,border:`1px solid ${T.border}`,
             borderRadius:20,cursor:"pointer",display:"flex",alignItems:"center",gap:8,boxShadow:"0 1px 2px rgba(0,0,0,0.05)"
           }}>
-            <span style={{fontSize:12,color:T.text,fontWeight:600}}>{(actieveUitzending.naam&&actieveUitzending.naam!=="undefined"&&!actieveUitzending.naam.includes("GMT")&&!actieveUitzending.naam.includes("00:00:00"))?actieveUitzending.naam:formatDatum(actieveUitzending.datum)}</span>
+            <span style={{fontSize:12,color:T.text,fontWeight:600}}>{formatUitzendingNaam(actieveUitzending)}</span>
             <span style={{fontSize:11,color:T.textMuted}}>{cleanTime(startTijd)}–{cleanTime(eindTijd)}</span>
             <span style={{fontSize:10,color:BRAND.roze}}>▼</span>
           </button>
