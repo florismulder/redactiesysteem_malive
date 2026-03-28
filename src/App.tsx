@@ -5,9 +5,7 @@ import React, { useState, useEffect, useRef } from "react";
 //  ⚙️  CONFIGURATIE — vul jouw Apps Script URL in:
 // ════════════════════════════════════════════════════════════
 const API_URL = "https://script.google.com/macros/s/AKfycbz3eJYN5ma_SuPwocnDtI1-XjafTXh7mORZab8XXn2StGkfEecLyDHLR_1bXh8RcP1n/exec";
-const API_KLAAR = !API_URL.includes("JOUW_DEPLOYMENT_ID");
-
-// ─── kleuren (licht thema) ────────────────────────────────
+const API_KLAAR = !API_U// ─── kleuren (licht thema) ────────────────────────────────
 const BRAND = {
   roze: "#FF00E7",
   paars: "#6A0DAD",
@@ -649,7 +647,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, isActi
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiestnaam"/>
               <EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Titel"/>
-              {"feitje" in item.extra&&<div style={{gridColumn:"span 2"}}><EF label="Feitje / nieuwtje" value={item.extra.feitje} onChange={v=>upd("feitje",v)} placeholder="Showhost vertelt…"/></div>}
+              {"feitje" in item.extra&&<div style={{gridColumn:"span 2"}}><EF label="Feitje / nieuwtje" value={item.extra.feitje} onChange={v=>{upd("feitje",v); const sec=Math.max(5,Math.ceil(v.trim().split(/\s+/).filter(Boolean).length/130*60)); onDuurChange(item.id,sec);}} multiline placeholder="Showhost vertelt…"/></div>}
             </div>
             <DuurInvoer item={item} onChange={onDuurChange} onZoek={()=>onZoek(item.id)}/>
           </>}
@@ -734,6 +732,130 @@ function ToevoegenKnop({ uur, onAdd }) {
           <button onClick={()=>setOpen(false)} style={{fontSize:11,color:T.textLight,background:"transparent",border:"none",cursor:"pointer"}}>Annuleer</button>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  TimelinePanel — rechterpaneel met blokjes
+// ════════════════════════════════════════════════════════════
+function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOver, setDragOver] = useState(null);
+
+  const uurItems = items.filter(i => i.uur === uur);
+
+  function moveItem(fromIdx, toIdx) {
+    if (fromIdx === toIdx) return;
+    const allIds = items.map(i => i.id);
+    const uurIds = uurItems.map(i => i.id);
+    const moved = [...uurIds];
+    const [removed] = moved.splice(fromIdx, 1);
+    moved.splice(toIdx, 0, removed);
+    // Rebuild full rundown with new uur order
+    const otherItems = items.filter(i => i.uur !== uur);
+    const reordered = [
+      ...items.filter(i => i.uur < uur),
+      ...moved.map(id => items.find(i => i.id === id)),
+      ...items.filter(i => i.uur > uur),
+    ];
+    onReorder(reordered);
+  }
+
+  const types = [
+    { key:"muziek",    label:"♪ Muziek" },
+    { key:"tekst",     label:"✎ Tekst" },
+    { key:"nieuws",    label:"📰 Nieuws" },
+    { key:"interview", label:"🎙 Interview" },
+    { key:"jingle",    label:"▶ Jingle" },
+    { key:"special",   label:"★ Special" },
+  ];
+
+  const [showAdd, setShowAdd] = useState(false);
+
+  return (
+    <div style={{width:140,flexShrink:0,background:"#F8F9FA",borderLeft:`1px solid ${T.border}`,
+      display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{padding:"10px 8px 6px",borderBottom:`1px solid ${T.border}`,
+        fontSize:9,letterSpacing:2,color:T.textMuted,fontWeight:600,textTransform:"uppercase"}}>
+        UUR {uur} — BLOKKEN
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"6px 6px"}}>
+        {uurItems.map((item, idx) => {
+          const tc = typeConfig[item.type] || typeConfig.tekst;
+          const isActive = item.id === activeId;
+          return (
+            <div key={item.id}
+              draggable
+              onDragStart={()=>setDragIdx(idx)}
+              onDragOver={e=>{e.preventDefault();setDragOver(idx);}}
+              onDragEnd={()=>{
+                if(dragIdx!==null&&dragOver!==null&&dragIdx!==dragOver) moveItem(dragIdx,dragOver);
+                setDragIdx(null);setDragOver(null);
+              }}
+              style={{
+                marginBottom:3,borderRadius:4,padding:"5px 7px",
+                background:isActive?tc.color:`${tc.color}22`,
+                border:`1px solid ${tc.color}55`,
+                cursor:"grab",
+                opacity:dragIdx===idx?0.4:1,
+                outline:dragOver===idx&&dragIdx!==idx?`2px dashed ${tc.color}`:"none",
+                transition:"opacity 0.15s",
+              }}>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <span style={{fontSize:10,flex:1,fontWeight:600,
+                  color:isActive?"#fff":tc.color,
+                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {tc.icon} {item.what}
+                </span>
+                <div style={{display:"flex",gap:1,flexShrink:0}}>
+                  <button onClick={()=>moveItem(idx,Math.max(0,idx-1))}
+                    style={{background:"transparent",border:"none",cursor:"pointer",
+                      fontSize:9,padding:"0 2px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▲</button>
+                  <button onClick={()=>moveItem(idx,Math.min(uurItems.length-1,idx+1))}
+                    style={{background:"transparent",border:"none",cursor:"pointer",
+                      fontSize:9,padding:"0 2px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▼</button>
+                  <button onClick={()=>onDelete(item.id)}
+                    style={{background:"transparent",border:"none",cursor:"pointer",
+                      fontSize:9,padding:"0 2px",color:isActive?"#ffaaaa":"#EF4444",lineHeight:1}}>✕</button>
+                </div>
+              </div>
+              <div style={{fontSize:9,color:isActive?"rgba(255,255,255,0.8)":T.textLight,marginTop:1}}>
+                {item.timeBerekend||item.time} · {item.duurWerkelijkSec<60?item.duurWerkelijkSec+"s":toMMSS(item.duurWerkelijkSec)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {/* Toevoegen */}
+      <div style={{padding:"6px",borderTop:`1px solid ${T.border}`}}>
+        {!showAdd ? (
+          <button onClick={()=>setShowAdd(true)} style={{
+            width:"100%",padding:"6px",background:"transparent",
+            border:`1px dashed ${T.borderDark}`,color:T.textMuted,
+            borderRadius:4,cursor:"pointer",fontSize:10,fontWeight:500}}>
+            + Toevoegen
+          </button>
+        ) : (
+          <div>
+            <div style={{fontSize:9,color:T.textMuted,marginBottom:4,fontWeight:600}}>Type:</div>
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              {types.map(t=>(
+                <button key={t.key} onClick={()=>{ onAdd(uur, t.key); setShowAdd(false); }} style={{
+                  padding:"4px 8px",borderRadius:4,border:`1px solid ${typeConfig[t.key].color}44`,
+                  background:`${typeConfig[t.key].color}12`,color:typeConfig[t.key].color,
+                  cursor:"pointer",fontSize:10,fontWeight:600,textAlign:"left"
+                }}>{t.label}</button>
+              ))}
+            </div>
+            <button onClick={()=>setShowAdd(false)}
+              style={{marginTop:4,fontSize:9,color:T.textLight,background:"transparent",border:"none",cursor:"pointer"}}>
+              Annuleer
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -850,7 +972,11 @@ export default function App() {
     setRundown(prev=>herbereken(prev.filter(r=>r.id!==id),startTijd));
   }
 
-  function handleAddItem(uur, type, positie) {
+  function handleReorder(newItems) {
+    setRundown(herbereken(newItems, startTijd));
+  }
+
+  function handleAddItem(uur, type, positie="einde") {
     const typeDefaults = {
       muziek:    { dur:180, extra:{artiest:"",nummer:"",feitje:""}, who:["Techniek","Muziekredactie"] },
       tekst:     { dur:60,  extra:{tekst:""},                       who:["Host"] },
@@ -975,7 +1101,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* Inhoud */}
+        {/* Inhoud + panel */}
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         <div style={{flex:1,overflowY:"auto",padding:"16px 24px",background:T.bg}}>
           {!actieveUitzending && (
             <div style={{textAlign:"center",padding:"60px 20px",color:T.textMuted}}>
@@ -1016,6 +1143,18 @@ export default function App() {
 
           {actieveUitzending && tab===3 && <GastenTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
           {actieveUitzending && tab===4 && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
+        </div>
+        {/* Timeline panel — alleen bij uur 1 of 2 */}
+        {actieveUitzending && (tab===1||tab===2) && role==="Eindredactie" && (
+          <TimelinePanel
+            items={rundown}
+            uur={tab}
+            activeId={getActiveId(tab)}
+            onReorder={handleReorder}
+            onDelete={handleDelete}
+            onAdd={(uur,type)=>handleAddItem(uur,type,"einde")}
+          />
+        )}
         </div>
       </div>
 
@@ -1140,4 +1279,5 @@ function RedactieTab({ uitzendingId, setSyncStatus }) {
       ))}
     </div>
   );
-}
+}RL.includes("JOUW_DEPLOYMENT_ID");
+
