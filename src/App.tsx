@@ -777,13 +777,13 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
   const [showAdd, setShowAdd] = useState(false);
 
   return (
-    <div style={{width:340,flexShrink:0,background:"#F8F9FA",borderLeft:`1px solid ${T.border}`,
+    <div style={{width:380,flexShrink:0,background:"#F8F9FA",borderLeft:`1px solid ${T.border}`,
       display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <div style={{padding:"10px 8px 6px",borderBottom:`1px solid ${T.border}`,
         fontSize:11,letterSpacing:2,color:T.textMuted,fontWeight:600,textTransform:"uppercase"}}>
         UUR {uur} — BLOKKEN
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"6px 6px"}}>
+      <div style={{flex:1,overflowY:"auto",padding:"8px 10px"}}>
         {uurItems.map((item, idx) => {
           const tc = typeConfig[item.type] || typeConfig.tekst;
           const isActive = item.id === activeId;
@@ -797,7 +797,7 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
                 setDragIdx(null);setDragOver(null);
               }}
               style={{
-                marginBottom:4,borderRadius:6,padding:"8px 10px",
+                marginBottom:5,borderRadius:6,padding:"9px 14px",
                 background:isActive?tc.color:`${tc.color}22`,
                 border:`1px solid ${tc.color}55`,
                 cursor:"grab",
@@ -1040,7 +1040,7 @@ export default function App() {
             marginLeft:8,padding:"5px 14px",background:T.bg,border:`1px solid ${T.border}`,
             borderRadius:20,cursor:"pointer",display:"flex",alignItems:"center",gap:8,boxShadow:"0 1px 2px rgba(0,0,0,0.05)"
           }}>
-            <span style={{fontSize:12,color:T.text,fontWeight:600}}>{actieveUitzending.naam&&actieveUitzending.naam!=="undefined"&&actieveUitzending.naam?actieveUitzending.naam:formatDatum(actieveUitzending.datum)}</span>
+            <span style={{fontSize:12,color:T.text,fontWeight:600}}>{(actieveUitzending.naam&&actieveUitzending.naam!=="undefined"&&!actieveUitzending.naam.includes("GMT")&&!actieveUitzending.naam.includes("00:00:00"))?actieveUitzending.naam:formatDatum(actieveUitzending.datum)}</span>
             <span style={{fontSize:11,color:T.textMuted}}>{cleanTime(startTijd)}–{cleanTime(eindTijd)}</span>
             <span style={{fontSize:10,color:BRAND.roze}}>▼</span>
           </button>
