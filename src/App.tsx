@@ -47,32 +47,25 @@ const toSec = s => { if (!s) return 0; const p = s.toString().split(":"); return
 const toMMSS = s => { if (!s) return ""; return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; };
 const addSec = (t, s) => { const clean=cleanTime(t); const [h,m]=clean.split(":").map(Number); const tot=h*3600+m*60+Math.round(s); return `${String(Math.floor(tot/3600)).padStart(2,"0")}:${String(Math.floor((tot%3600)/60)).padStart(2,"0")}`; };
 const timeToSec = t => { const clean=cleanTime(t); const [h,m]=clean.split(":").map(Number); return h*3600+m*60; };
-// Converts any time value to clean "HH:MM" — handles Sheets Date objects,
-// ISO strings, "GMT+0100" strings, plain "12:00" etc.
+// Converts any time value to clean "HH:MM"
+// Handles: "12:00", "Sat Dec 30 1899 12:00:00 GMT+0100 (...)", ISO strings
 function cleanTime(t) {
   if (!t) return "12:00";
   const s = String(t).trim();
   // Already clean HH:MM
   if (/^\d{1,2}:\d{2}$/.test(s)) return s;
-  // Try parsing as a Date object string (e.g. "Mon Mar 16 2026 00:00:00 GMT+0100 ...")
-  // or ISO string — extract hours and minutes
-  try {
-    const d = new Date(s);
-    if (!isNaN(d.getTime())) {
-      const h = String(d.getHours()).padStart(2,"0");
-      const m = String(d.getMinutes()).padStart(2,"0");
-      // Sanity check: if hours are 0 and input wasn't meant to be midnight,
-      // try regex fallback first
-      const regexMatch = s.match(/(\d{1,2}):(\d{2})(?::\d{2})/);
-      if (regexMatch) {
-        return regexMatch[1].padStart(2,"0") + ":" + regexMatch[2];
-      }
-      return h + ":" + m;
-    }
-  } catch(e) {}
-  // Regex fallback: grab first HH:MM(:SS) pattern
-  const match = s.match(/(\d{1,2}):(\d{2})(?::\d{2})?/);
-  if (match) return match[1].padStart(2,"0") + ":" + match[2];
+  // Google Sheets time: "Sat Dec 30 1899 HH:MM:SS GMT+0100 (Midden-Europese standaardtijd)"
+  // Extract HH:MM directly with regex — most reliable approach
+  // Match "HH:MM:SS" pattern (not date-like "YYYY-MM-DD")
+  const timeMatch = s.match(/(\d{1,2}):(\d{2}):\d{2}/);
+  if (timeMatch) {
+    return timeMatch[1].padStart(2,"0") + ":" + timeMatch[2];
+  }
+  // Match plain "HH:MM" 
+  const shortMatch = s.match(/(\d{1,2}):(\d{2})/);
+  if (shortMatch) {
+    return shortMatch[1].padStart(2,"0") + ":" + shortMatch[2];
+  }
   return "12:00";
 }
 
@@ -295,7 +288,7 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose }) {
               style={{padding:"14px 24px",cursor:"pointer",display:"flex",alignItems:"center",gap:14,borderBottom:`1px solid ${T.border}`,transition:"background 0.1s"}}>
               <div style={{width:10,height:10,borderRadius:"50%",background:BRAND.gradient,flexShrink:0}}/>
               <div style={{flex:1}}>
-                <div style={{fontSize:14,fontWeight:600,color:T.text}}>{u.naam && u.naam!=="undefined" ? u.naam : formatDatum(u.datum)}</div>
+                <div style={{fontSize:14,fontWeight:600,color:T.text}}>{formatUitzendingNaam(u)}</div>
                 <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>
                   {formatDatum(u.datum)} · {cleanTime(u.startTijd||"12:00")} – {cleanTime(u.eindTijd||"14:00")}
                 </div>
@@ -753,7 +746,7 @@ function ToevoegenKnop({ uur, onAdd }) {
 // ════════════════════════════════════════════════════════════
 //  TimelinePanel — rechterpaneel met blokjes
 // ════════════════════════════════════════════════════════════
-function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
+function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, activeId }) {
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOver, setDragOver] = useState(null);
 
@@ -817,9 +810,12 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, activeId }) {
                 transition:"opacity 0.15s",
               }}>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <span style={{fontSize:12,flex:1,fontWeight:600,
+                <span onClick={()=>onScrollTo&&onScrollTo(item.id)}
+                  style={{fontSize:12,flex:1,fontWeight:600,cursor:"pointer",
                   color:isActive?"#fff":tc.color,
-                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
+                  textDecoration:"none"}}
+                  title="Klik om naar dit blok te scrollen">
                   {tc.icon} {item.what}
                 </span>
                 <div style={{display:"flex",gap:1,flexShrink:0}}>
@@ -890,6 +886,8 @@ export default function App() {
   const [zoekId, setZoekId] = useState(null);
   const [spotifyToken, setSpotifyToken] = useState("");
   const [syncStatus, setSyncStatus] = useState(API_KLAAR ? "laden" : "lokaal");
+  const [highlightId, setHighlightId] = useState(null);
+  const itemRefs = useRef({});
 
   const startTijd = cleanTime(actieveUitzending?.startTijd || "12:00");
   const eindTijd = cleanTime(actieveUitzending?.eindTijd || "14:00");
@@ -987,6 +985,13 @@ export default function App() {
 
   function handleReorder(newItems) {
     setRundown(herbereken(newItems, startTijd));
+  }
+
+  function scrollToItem(id) {
+    setHighlightId(id);
+    const el = itemRefs.current[id];
+    if (el) el.scrollIntoView({ behavior:"smooth", block:"center" });
+    setTimeout(()=>setHighlightId(null), 2000);
   }
 
   function handleAddItem(uur, type, positie="einde") {
@@ -1144,12 +1149,15 @@ export default function App() {
             </div>
             <DriftBalk items={rundown} uur={tab} startTijd={startTijd}/>
             {(tab===1?items1:items2).map(item=>(
-              <ItemCard key={item.id} item={item} role={role}
-                onUpdate={handleUpdate} onDuurChange={handleDuurChange}
-                onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
-                onDelete={role==="Eindredactie"?handleDelete:null}
-                isActive={getActiveId(tab)===item.id}
-                isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
+              <div key={item.id} ref={el=>itemRefs.current[item.id]=el}
+                style={{scrollMarginTop:12, outline:highlightId===item.id?"2px solid #FF00E7":"none", outlineOffset:2, borderRadius:6, transition:"outline 0.3s"}}>
+                <ItemCard item={item} role={role}
+                  onUpdate={handleUpdate} onDuurChange={handleDuurChange}
+                  onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
+                  onDelete={role==="Eindredactie"?handleDelete:null}
+                  isActive={getActiveId(tab)===item.id}
+                  isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
+              </div>
             ))}
             {role==="Eindredactie" && <ToevoegenKnop uur={tab} onAdd={handleAddItem}/>}
           </>}
@@ -1166,6 +1174,7 @@ export default function App() {
             onReorder={handleReorder}
             onDelete={handleDelete}
             onAdd={(uur,type)=>handleAddItem(uur,type,"einde")}
+            onScrollTo={scrollToItem}
           />
         )}
         </div>
