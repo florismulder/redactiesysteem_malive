@@ -2,8 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 
 // ════════════════════════════════════════════════════════════
-//  ⚙️  CONFIGURATIE
-//  Vul na deployment jouw Apps Script URL in:
+//  ⚙️  CONFIGURATIE — vul jouw Apps Script URL in:
 // ════════════════════════════════════════════════════════════
 const API_URL = "https://script.google.com/macros/s/AKfycbz3eJYN5ma_SuPwocnDtI1-XjafTXh7mORZab8XXn2StGkfEecLyDHLR_1bXh8RcP1n/exec";
 const API_KLAAR = !API_URL.includes("JOUW_DEPLOYMENT_ID");
@@ -48,15 +47,32 @@ const toSec = s => { if (!s) return 0; const p = s.toString().split(":"); return
 const toMMSS = s => { if (!s) return ""; return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; };
 const addSec = (t, s) => { const clean=cleanTime(t); const [h,m]=clean.split(":").map(Number); const tot=h*3600+m*60+Math.round(s); return `${String(Math.floor(tot/3600)).padStart(2,"0")}:${String(Math.floor((tot%3600)/60)).padStart(2,"0")}`; };
 const timeToSec = t => { const clean=cleanTime(t); const [h,m]=clean.split(":").map(Number); return h*3600+m*60; };
-// Handles "12:00", "Sat Dec 30 1899 12:00:00 GMT+0000", full ISO strings etc.
+// Converts any time value to clean "HH:MM" — handles Sheets Date objects,
+// ISO strings, "GMT+0100" strings, plain "12:00" etc.
 function cleanTime(t) {
   if (!t) return "12:00";
-  const s = String(t);
-  // Already HH:MM format
+  const s = String(t).trim();
+  // Already clean HH:MM
   if (/^\d{1,2}:\d{2}$/.test(s)) return s;
-  // Try to extract HH:MM from a full date string
+  // Try parsing as a Date object string (e.g. "Mon Mar 16 2026 00:00:00 GMT+0100 ...")
+  // or ISO string — extract hours and minutes
+  try {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      const h = String(d.getHours()).padStart(2,"0");
+      const m = String(d.getMinutes()).padStart(2,"0");
+      // Sanity check: if hours are 0 and input wasn't meant to be midnight,
+      // try regex fallback first
+      const regexMatch = s.match(/(\d{1,2}):(\d{2})(?::\d{2})/);
+      if (regexMatch) {
+        return regexMatch[1].padStart(2,"0") + ":" + regexMatch[2];
+      }
+      return h + ":" + m;
+    }
+  } catch(e) {}
+  // Regex fallback: grab first HH:MM(:SS) pattern
   const match = s.match(/(\d{1,2}):(\d{2})(?::\d{2})?/);
-  if (match) return `${match[1].padStart(2,"0")}:${match[2]}`;
+  if (match) return match[1].padStart(2,"0") + ":" + match[2];
   return "12:00";
 }
 
@@ -65,20 +81,30 @@ const maandNamen = ["januari","februari","maart","april","mei","juni","juli","au
 
 function formatDatum(dateStr) {
   if (!dateStr) return "";
-  // Handle ISO timestamps (2026-03-15T23:00:00.000Z) and plain dates (2026-03-15)
-  let d;
-  const str = String(dateStr);
-  if (str.includes("T")) {
-    // ISO timestamp — parse as local date by extracting date part
-    const datePart = str.split("T")[0];
-    const [y,m,day] = datePart.split("-").map(Number);
-    d = new Date(y, m-1, day+1); // +1 because Sheets stores date as previous day UTC
-  } else {
-    const [y,m,day] = str.split("-").map(Number);
-    d = new Date(y, m-1, day);
+  const str = String(dateStr).trim();
+  let y, m, day;
+  // Try YYYY-MM-DD (with optional time after T)
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    [, y, m, day] = isoMatch.map(Number);
+    // Sheets UTC dates are often 1 day behind in CET — compensate
+    const d = new Date(y, m-1, day);
+    // If original string has T and time is 23:xx, it's next day in CET
+    if (str.includes("T")) {
+      const timePart = str.split("T")[1]||"";
+      const hour = parseInt(timePart.split(":")[0]||"0");
+      if (hour >= 22) d.setDate(d.getDate()+1);
+    }
+    return `${dagNamen[d.getDay()]} ${d.getDate()} ${maandNamen[d.getMonth()]} ${d.getFullYear()}`;
   }
-  if (isNaN(d.getTime())) return String(dateStr);
-  return `${dagNamen[d.getDay()]} ${d.getDate()} ${maandNamen[d.getMonth()]} ${d.getFullYear()}`;
+  // Try parsing generic date string (Mon Mar 16 2026...)
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime()) && d.getFullYear() > 1900) {
+      return `${dagNamen[d.getDay()]} ${d.getDate()} ${maandNamen[d.getMonth()]} ${d.getFullYear()}`;
+    }
+  } catch(e) {}
+  return str;
 }
 
 // ─── basisrundown ──────────────────────────────────────────
@@ -548,14 +574,14 @@ function EF({ label, value, onChange, multiline=false, placeholder="" }) {
     <div style={{marginBottom:8}}>
       {label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}
       {multiline ? (
-        <div style={{position:"relative"}}>
-          <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:56,paddingRight:36}}/>
+        <div style={{display:"flex",gap:6,alignItems:"flex-start"}}>
           <button onClick={()=>setPopupOpen(true)} title="Groter bewerken"
-            style={{position:"absolute",top:5,right:5,background:"#fff",border:`1px solid ${T.borderDark}`,cursor:"pointer",
-              fontSize:13,color:BRAND.paars,padding:"2px 6px",borderRadius:4,fontWeight:700,lineHeight:1,
-              boxShadow:"0 1px 3px rgba(0,0,0,0.1)"}}>
+            style={{flexShrink:0,background:"#fff",border:`1px solid ${T.borderDark}`,cursor:"pointer",
+              fontSize:13,color:BRAND.paars,padding:"6px 8px",borderRadius:4,fontWeight:700,lineHeight:1,
+              boxShadow:"0 1px 3px rgba(0,0,0,0.1)",marginTop:1}}>
             ⛶
           </button>
+          <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:56,flex:1}}/>
           <TekstPopup open={popupOpen} label={label} value={value} onChange={onChange} onClose={()=>setPopupOpen(false)}/>
         </div>
       ) : (
