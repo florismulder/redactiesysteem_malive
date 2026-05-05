@@ -27,6 +27,26 @@ const typeConfig = {
   special:   { label:"SPECIAL",  color:"#00796B", icon:"★",  bg:"#E8F5F3" },
 };
 
+// ─── kleuren (licht thema) ────────────────────────────────
+const BRAND = {
+  roze: "#FF00E7",
+  paars: "#6A0DAD",
+  gradient: "linear-gradient(135deg, #FF00E7, #6A0DAD)",
+};
+const roleColors = {
+  Eindredactie: "#CC00BB", Host: "#0097A7",
+  Techniek: "#F57F17", Nieuwsredactie: "#2E7D32",
+  Muziekredactie: "#6A0DAD",
+};
+const typeConfig = {
+  muziek:    { label:"MUZIEK",    color:"#1565C0", icon:"♪",  bg:"#EBF3FF" },
+  jingle:    { label:"JINGLE",    color:"#C62828", icon:"▶",  bg:"#FFEBEE" },
+  tekst:     { label:"TEKST",     color:"#CC00BB", icon:"✎",  bg:"#FFF0FD" },
+  nieuws:    { label:"NIEUWS",    color:"#2E7D32", icon:"📰", bg:"#F0FAF0" },
+  interview: { label:"INTERVIEW", color:"#E64A19", icon:"🎙", bg:"#FFF3EE" },
+  special:   { label:"SPECIAL",  color:"#00796B", icon:"★",  bg:"#E8F5F3" },
+};
+
 // ─── thema kleuren ────────────────────────────────────────
 const T = {
   bg:         "#F5F6F8",
@@ -55,13 +75,10 @@ function cleanTime(t) {
   // Already clean HH:MM
   if (/^\d{1,2}:\d{2}$/.test(s)) return s;
   // Google Sheets time: "Sat Dec 30 1899 HH:MM:SS GMT+0100 (Midden-Europese standaardtijd)"
-  // Extract HH:MM directly with regex — most reliable approach
-  // Match "HH:MM:SS" pattern (not date-like "YYYY-MM-DD")
   const timeMatch = s.match(/(\d{1,2}):(\d{2}):\d{2}/);
   if (timeMatch) {
     return timeMatch[1].padStart(2,"0") + ":" + timeMatch[2];
   }
-  // Match plain "HH:MM" 
   const shortMatch = s.match(/(\d{1,2}):(\d{2})/);
   if (shortMatch) {
     return shortMatch[1].padStart(2,"0") + ":" + shortMatch[2];
@@ -76,13 +93,10 @@ function formatDatum(dateStr) {
   if (!dateStr) return "";
   const str = String(dateStr).trim();
   let y, m, day;
-  // Try YYYY-MM-DD (with optional time after T)
   const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) {
     [, y, m, day] = isoMatch.map(Number);
-    // Sheets UTC dates are often 1 day behind in CET — compensate
     const d = new Date(y, m-1, day);
-    // If original string has T and time is 23:xx, it's next day in CET
     if (str.includes("T")) {
       const timePart = str.split("T")[1]||"";
       const hour = parseInt(timePart.split(":")[0]||"0");
@@ -90,7 +104,6 @@ function formatDatum(dateStr) {
     }
     return `${dagNamen[d.getDay()]} ${d.getDate()} ${maandNamen[d.getMonth()]} ${d.getFullYear()}`;
   }
-  // Try parsing generic date string (Mon Mar 16 2026...)
   try {
     const d = new Date(str);
     if (!isNaN(d.getTime()) && d.getFullYear() > 1900) {
@@ -104,7 +117,6 @@ function formatDatum(dateStr) {
 function formatUitzendingNaam(u) {
   if (!u) return "";
   const naam = u.naam || "";
-  // Als naam leeg is, "undefined" bevat, of een raw datum-string is → gebruik formatDatum
   if (!naam || naam === "undefined" || naam.includes("GMT") || naam.includes("00:00:00") || naam.match(/^\w{3} \w{3}/)) {
     return formatDatum(u.datum);
   }
@@ -167,14 +179,40 @@ function buildBase(startTijd = "12:00") {
   }));
 }
 
+// Genereer een standaard rundown voor uur N (N >= 3)
+function buildUurBase(uur, startTijd = "12:00") {
+  const startSec = timeToSec(startTijd) + (uur - 1) * 3600;
+  const ts = Date.now();
+  const defaults = [
+    { id:ts+1, offset:0,    dur:180, type:"muziek",    what:"Muziek",            who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""} },
+    { id:ts+2, offset:180,  dur:5,   type:"jingle",    what:"Jingle",            who:["Techniek"],                  extra:{label:"Jingle"} },
+    { id:ts+3, offset:185,  dur:60,  type:"tekst",     what:`Opening uur ${uur}`,who:["Host"],                      extra:{tekst:""} },
+    { id:ts+4, offset:245,  dur:300, type:"nieuws",    what:"Nieuws",            who:["Nieuwsredactie"],            extra:{intro:"",berichten:""} },
+    { id:ts+5, offset:545,  dur:180, type:"muziek",    what:"Muziek",            who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""} },
+    { id:ts+6, offset:725,  dur:300, type:"interview", what:"Interview",         who:["Host"],                      extra:{wie:"",tel:"",functie:"",intro:""} },
+    { id:ts+7, offset:1025, dur:180, type:"muziek",    what:"Muziek",            who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""} },
+    { id:ts+8, offset:1205, dur:180, type:"muziek",    what:"Muziek",            who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""} },
+    { id:ts+9, offset:1385, dur:60,  type:"tekst",     what:"Afsluiting",        who:["Host"],                      extra:{tekst:""} },
+  ];
+  return defaults.map(item => ({
+    ...item,
+    time: addSec("00:00", startSec + item.offset),
+    duurGeplandSec: item.dur,
+    duurWerkelijkSec: item.dur,
+    uur,
+    spotifyUri: null,
+  }));
+}
+
+// ─── herbereken: generiek voor elk aantal uren ────────────
 function herbereken(items, startTijd = "12:00") {
   const startSec = timeToSec(startTijd);
-  const uurBreakSec = startSec + 3600;
+  const uren = [...new Set(items.map(i => i.uur))].sort((a, b) => a - b);
   const res = [...items];
-  [1,2].forEach(uur => {
-    let cursor = uur === 1 ? startSec : uurBreakSec;
-    res.filter(i=>i.uur===uur).forEach(item => {
-      const idx = res.findIndex(r=>r.id===item.id);
+  uren.forEach(uur => {
+    let cursor = startSec + (uur - 1) * 3600;
+    res.filter(i => i.uur === uur).forEach(item => {
+      const idx = res.findIndex(r => r.id === item.id);
       res[idx] = { ...res[idx], timeBerekend: addSec("00:00", cursor) };
       cursor += item.duurWerkelijkSec;
     });
@@ -182,10 +220,11 @@ function herbereken(items, startTijd = "12:00") {
   return res;
 }
 
+// ─── driftSec: generiek voor elk uur ─────────────────────
 function driftSec(items, uur, startTijd = "12:00") {
   const startSec = timeToSec(startTijd);
-  const uurStart = uur === 1 ? startSec : startSec + 3600;
-  return uurStart + items.filter(i=>i.uur===uur).reduce((s,i)=>s+i.duurWerkelijkSec,0) - (uurStart + 3600);
+  const uurStart = startSec + (uur - 1) * 3600;
+  return uurStart + items.filter(i => i.uur === uur).reduce((s, i) => s + i.duurWerkelijkSec, 0) - (uurStart + 3600);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -244,20 +283,47 @@ function SyncBadge({ status }) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  UitzendingModal
+//  UitzendingModal — met verwijderknop per uitzending
 // ════════════════════════════════════════════════════════════
-function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose }) {
+function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDelete, onCopy }) {
   const [nieuwDatum, setNieuwDatum] = useState("");
   const [nieuwNaam, setNieuwNaam] = useState("");
   const [nieuwStart, setNieuwStart] = useState("12:00");
   const [nieuwEind, setNieuwEind] = useState("14:00");
   const [aanmaken, setAanmaken] = useState(false);
+  const [bevestigId, setBevestigId] = useState(null);  // id bezig met verwijderen
+  const [kopieerInfo, setKopieerInfo] = useState(null); // { id, datum, naam } bezig met kopiëren
 
   function handleCreate() {
     if (!nieuwDatum) return;
     const naam = nieuwNaam || formatDatum(nieuwDatum);
     onCreate({ datum: nieuwDatum, naam, startTijd: nieuwStart, eindTijd: nieuwEind });
     setAanmaken(false);
+  }
+
+  function handleDeleteClick(e, id) {
+    e.stopPropagation();
+    setKopieerInfo(null);
+    setBevestigId(id);
+  }
+
+  function handleDeleteConfirm(e) {
+    e.stopPropagation();
+    if (onDelete && bevestigId) onDelete(bevestigId);
+    setBevestigId(null);
+  }
+
+  function handleKopieerClick(e, u) {
+    e.stopPropagation();
+    setBevestigId(null);
+    setKopieerInfo({ id: u.id, datum: "", naam: `Kopie van ${formatUitzendingNaam(u)}` });
+  }
+
+  function handleKopieerBevestig(e) {
+    e.stopPropagation();
+    if (!kopieerInfo?.datum) return;
+    onCopy(kopieerInfo.id, { datum: kopieerInfo.datum, naam: kopieerInfo.naam });
+    setKopieerInfo(null);
   }
 
   if (!open) return null;
@@ -282,18 +348,83 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose }) {
             </div>
           )}
           {uitzendingen.map(u => (
-            <div key={u.id} onClick={()=>onSelect(u)}
-              onMouseEnter={e=>e.currentTarget.style.background="#F9FAFB"}
-              onMouseLeave={e=>e.currentTarget.style.background="#fff"}
-              style={{padding:"14px 24px",cursor:"pointer",display:"flex",alignItems:"center",gap:14,borderBottom:`1px solid ${T.border}`,transition:"background 0.1s"}}>
-              <div style={{width:10,height:10,borderRadius:"50%",background:BRAND.gradient,flexShrink:0}}/>
-              <div style={{flex:1}}>
-                <div style={{fontSize:14,fontWeight:600,color:T.text}}>{formatUitzendingNaam(u)}</div>
-                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>
-                  {formatDatum(u.datum)} · {cleanTime(u.startTijd||"12:00")} – {cleanTime(u.eindTijd||"14:00")}
+            <div key={u.id}>
+              <div onClick={()=>{ setBevestigId(null); setKopieerInfo(null); onSelect(u); }}
+                onMouseEnter={e=>e.currentTarget.style.background="#F9FAFB"}
+                onMouseLeave={e=>e.currentTarget.style.background="#fff"}
+                style={{padding:"14px 24px",cursor:"pointer",display:"flex",alignItems:"center",gap:14,borderBottom: kopieerInfo?.id===u.id ? "none" : `1px solid ${T.border}`,transition:"background 0.1s"}}>
+                <div style={{width:10,height:10,borderRadius:"50%",background:BRAND.gradient,flexShrink:0}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:14,fontWeight:600,color:T.text}}>{formatUitzendingNaam(u)}</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>
+                    {formatDatum(u.datum)} · {cleanTime(u.startTijd||"12:00")} – {cleanTime(u.eindTijd||"14:00")}
+                    {u.aantalUren > 2 && <span style={{marginLeft:6,color:BRAND.paars,fontWeight:600}}>{u.aantalUren} uur</span>}
+                  </div>
                 </div>
+                {/* Verwijder-bevestiging */}
+                {bevestigId === u.id ? (
+                  <div style={{display:"flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+                    <span style={{fontSize:11,color:"#EF4444",fontWeight:600}}>Verwijderen?</span>
+                    <button onClick={handleDeleteConfirm}
+                      style={{padding:"3px 10px",background:"#EF4444",border:"none",color:"#fff",borderRadius:4,cursor:"pointer",fontSize:11,fontWeight:700}}>Ja</button>
+                    <button onClick={e=>{e.stopPropagation();setBevestigId(null);}}
+                      style={{padding:"3px 10px",background:"transparent",border:`1px solid ${T.borderDark}`,color:T.textMuted,borderRadius:4,cursor:"pointer",fontSize:11}}>Nee</button>
+                  </div>
+                ) : (
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    {/* Kopieer-knop */}
+                    <button onClick={e=>handleKopieerClick(e, u)}
+                      title="Uitzending kopiëren"
+                      style={{background:"transparent",border:`1px solid ${T.border}`,color:BRAND.paars,
+                        borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}}
+                      onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+                      onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>
+                      ⧉
+                    </button>
+                    {/* Verwijder-knop */}
+                    <button onClick={e=>handleDeleteClick(e, u.id)}
+                      title="Uitzending verwijderen"
+                      style={{background:"transparent",border:`1px solid ${T.border}`,color:"#EF4444",
+                        borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}}
+                      onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+                      onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>
+                      🗑
+                    </button>
+                    <div style={{fontSize:12,color:BRAND.roze,fontWeight:600}}>Laden →</div>
+                  </div>
+                )}
               </div>
-              <div style={{fontSize:12,color:BRAND.roze,fontWeight:600}}>Laden →</div>
+              {/* Kopieer-form — inline onder de rij */}
+              {kopieerInfo?.id === u.id && (
+                <div style={{padding:"12px 24px",background:"#F9F0FF",borderBottom:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:8}}
+                  onClick={e=>e.stopPropagation()}>
+                  <div style={{fontSize:11,color:BRAND.paars,fontWeight:600,letterSpacing:1,textTransform:"uppercase"}}>Kopiëren naar nieuwe uitzending</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:8}}>
+                    <div>
+                      <div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>NIEUWE DATUM</div>
+                      <input type="date" value={kopieerInfo.datum}
+                        onChange={e=>setKopieerInfo(p=>({...p,datum:e.target.value}))}
+                        style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>NAAM (optioneel)</div>
+                      <input type="text" value={kopieerInfo.naam}
+                        onChange={e=>setKopieerInfo(p=>({...p,naam:e.target.value}))}
+                        style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={handleKopieerBevestig} disabled={!kopieerInfo.datum}
+                      style={{padding:"6px 16px",background:kopieerInfo.datum?BRAND.gradient:"#E5E7EB",border:"none",color:kopieerInfo.datum?"#fff":T.textMuted,borderRadius:6,cursor:kopieerInfo.datum?"pointer":"default",fontSize:12,fontWeight:700}}>
+                      Kopiëren
+                    </button>
+                    <button onClick={e=>{e.stopPropagation();setKopieerInfo(null);}}
+                      style={{padding:"6px 12px",background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,borderRadius:6,cursor:"pointer",fontSize:12}}>
+                      Annuleer
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -480,13 +611,13 @@ function DuurInvoer({ item, onChange, onZoek }) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  DriftBalk
+//  DriftBalk — generiek voor elk uur
 // ════════════════════════════════════════════════════════════
 function DriftBalk({ items, uur, startTijd }) {
   const drift = driftSec(items, uur, startTijd);
   const abs = Math.abs(drift);
   const startSec = timeToSec(startTijd||"12:00");
-  const uurEindTijd = addSec("00:00", (uur===1?startSec:startSec+3600) + 3600);
+  const uurEindTijd = addSec("00:00", startSec + uur * 3600);
   const label = abs<5 ? null : drift>0
     ? `⚠ +${toMMSS(abs)} te lang — eindigt om ${addSec(uurEindTijd, drift)}`
     : `↑ ${toMMSS(abs)} te kort — eindigt om ${addSec(uurEindTijd, drift)}`;
@@ -645,6 +776,9 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, isActi
                 background:`${roleColors[w]||"#6B7280"}18`,color:roleColors[w]||T.textMuted,
                 border:`1px solid ${roleColors[w]||"#6B7280"}33`,fontWeight:500}}>{w}</span>
             ))}
+            {onDelete&&<button onClick={()=>onDelete(item.id)}
+              style={{fontSize:11,padding:"1px 6px",background:"transparent",border:`1px solid #EF444433`,
+                color:"#EF4444",borderRadius:4,cursor:"pointer",marginLeft:4}}>✕</button>}
           </div>
         </div>
 
@@ -659,7 +793,6 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, isActi
           </>}
           {item.type==="tekst"&&<EF label="Presentatietekst" value={item.extra.tekst} onChange={v=>{
             upd("tekst",v);
-            // Automatisch duur berekenen op basis van woordtelling (130 woorden/min)
             const woorden = v.trim().split(/\s+/).filter(Boolean).length;
             const sec = Math.max(10, Math.ceil(woorden / 130 * 60));
             onDuurChange(item.id, sec);
@@ -754,13 +887,10 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, act
 
   function moveItem(fromIdx, toIdx) {
     if (fromIdx === toIdx) return;
-    const allIds = items.map(i => i.id);
     const uurIds = uurItems.map(i => i.id);
     const moved = [...uurIds];
     const [removed] = moved.splice(fromIdx, 1);
     moved.splice(toIdx, 0, removed);
-    // Rebuild full rundown with new uur order
-    const otherItems = items.filter(i => i.uur !== uur);
     const reordered = [
       ...items.filter(i => i.uur < uur),
       ...moved.map(id => items.find(i => i.id === id)),
@@ -813,8 +943,7 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, act
                 <span onClick={()=>onScrollTo&&onScrollTo(item.id)}
                   style={{fontSize:12,flex:1,fontWeight:600,cursor:"pointer",
                   color:isActive?"#fff":tc.color,
-                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
-                  textDecoration:"none"}}
+                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
                   title="Klik om naar dit blok te scrollen">
                   {tc.icon} {item.what}
                 </span>
@@ -852,9 +981,9 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, act
             <div style={{display:"flex",flexDirection:"column",gap:3}}>
               {types.map(t=>(
                 <button key={t.key} onClick={()=>{ onAdd(uur, t.key); setShowAdd(false); }} style={{
-                  padding:"4px 8px",borderRadius:4,border:`1px solid ${typeConfig[t.key].color}44`,
+                  padding:"6px 10px",borderRadius:4,border:`1px solid ${typeConfig[t.key].color}44`,
                   background:`${typeConfig[t.key].color}12`,color:typeConfig[t.key].color,
-                  cursor:"pointer",fontSize:12,fontWeight:600,textAlign:"left",padding:"6px 10px"
+                  cursor:"pointer",fontSize:12,fontWeight:600,textAlign:"left"
                 }}>{t.label}</button>
               ))}
             </div>
@@ -878,7 +1007,7 @@ export default function App() {
   const [showUitzendingModal, setShowUitzendingModal] = useState(true);
   const [rundown, setRundown] = useState([]);
   const [role, setRole] = useState("Eindredactie");
-  const [tab, setTab] = useState(1);
+  const [tab, setTab] = useState("uur_1"); // "uur_1", "uur_2", ..., "gasten", "redactie"
   const [now, setNow] = useState(new Date());
   const [simTime, setSimTime] = useState("12:00");
   const [useSim, setUseSim] = useState(true);
@@ -891,6 +1020,11 @@ export default function App() {
 
   const startTijd = cleanTime(actieveUitzending?.startTijd || "12:00");
   const eindTijd = cleanTime(actieveUitzending?.eindTijd || "14:00");
+  const aantalUren = actieveUitzending?.aantalUren || 2;
+
+  // Tab-helpers
+  const isUurTab = tab.startsWith("uur_");
+  const tabUur = isUurTab ? parseInt(tab.split("_")[1]) : 0;
 
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
 
@@ -904,8 +1038,14 @@ export default function App() {
 
   useEffect(()=>{
     if (!actieveUitzending) return;
-    const base = herbereken(buildBase(startTijd), startTijd);
-    setRundown(base);
+    const n = actieveUitzending.aantalUren || 2;
+    let base = buildBase(startTijd);
+    // Voeg basis-items toe voor extra uren (> 2)
+    for (let u = 3; u <= n; u++) {
+      base = [...base, ...buildUurBase(u, startTijd)];
+    }
+    const baseBerekend = herbereken(base, startTijd);
+    setRundown(baseBerekend);
     setSyncStatus("laden");
     if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
     sheetGet("getRundown", actieveUitzending.id).then(res=>{
@@ -913,7 +1053,6 @@ export default function App() {
         setRundown(prev=>herbereken(prev.map(item=>{
           const saved = res.data[item.id];
           if (!saved) return item;
-          // saved IS the extra object (Apps Script stores extra directly)
           const extra = saved.extra || saved;
           return { ...item,
             extra:{...item.extra,...extra},
@@ -942,7 +1081,7 @@ export default function App() {
 
   async function handleCreate(data) {
     const id = "uitz_" + Date.now();
-    const nieuw = { id, ...data };
+    const nieuw = { id, ...data, aantalUren: 2 };
     if (API_KLAAR) await sheetPost({ action:"createUitzending", uitzendingId:"", data:nieuw });
     setUitzendingen(prev=>[...prev, nieuw]);
     handleSelectUitzending(nieuw);
@@ -953,17 +1092,82 @@ export default function App() {
     setActieveUitzending(u);
     setSimTime(cleanTime(u.startTijd || "12:00"));
     setShowUitzendingModal(false);
+    setTab("uur_1");
+  }
+
+  // Verwijder een uitzending (inclusief data in de sheet)
+  function handleDeleteUitzending(id) {
+    setUitzendingen(prev => prev.filter(u => u.id !== id));
+    if (actieveUitzending?.id === id) {
+      setActieveUitzending(null);
+      setRundown([]);
+      setShowUitzendingModal(true);
+    }
+    if (API_KLAAR) sheetPost({ action:"deleteUitzending", uitzendingId:id, data:{} });
+  }
+
+  // Kopieer een uitzending naar een nieuwe datum/naam
+  async function handleCopyUitzending(bronId, { datum, naam }) {
+    const bron = uitzendingen.find(u => u.id === bronId);
+    if (!bron) return;
+    const nieuwId = "uitz_" + Date.now();
+    const kopiee = {
+      id: nieuwId,
+      datum,
+      naam: naam || `Kopie van ${formatUitzendingNaam(bron)}`,
+      startTijd: bron.startTijd || "12:00",
+      eindTijd:  bron.eindTijd  || "14:00",
+      aantalUren: bron.aantalUren || 2,
+    };
+    // copyUitzending maakt de nieuwe uitzending aan én kopieert
+    // alle rundown-, gasten- en redactierijen in één actie
+    if (API_KLAAR) {
+      await sheetPost({ action:"copyUitzending", uitzendingId:bronId, data:kopiee });
+    }
+    setUitzendingen(prev => [...prev, kopiee]);
+    handleSelectUitzending(kopiee);
+  }
+
+  // Voeg een uur toe aan de actieve uitzending
+  function handleVoegUurToe() {
+    if (!actieveUitzending) return;
+    const nieuweUur = aantalUren + 1;
+    const extraItems = buildUurBase(nieuweUur, startTijd);
+    setRundown(prev => herbereken([...prev, ...extraItems], startTijd));
+    const updated = { ...actieveUitzending, aantalUren: nieuweUur };
+    setActieveUitzending(updated);
+    setUitzendingen(prev => prev.map(u => u.id === updated.id ? updated : u));
+    if (API_KLAAR) sheetPost({ action:"updateUitzendingMeta", uitzendingId:actieveUitzending.id, data:{ aantalUren: nieuweUur } });
+    setTab(`uur_${nieuweUur}`);
+  }
+
+  // Verwijder het laatste uur van de actieve uitzending
+  function handleVerwijderLaatsteUur() {
+    if (!actieveUitzending || aantalUren <= 1) return;
+    const uurToRemove = aantalUren;
+    const itemCount = rundown.filter(i => i.uur === uurToRemove).length;
+    if (!window.confirm(`Uur ${uurToRemove} verwijderen? Dit verwijdert ${itemCount} items uit het draaiboek.`)) return;
+    const nieuwRundown = herbereken(rundown.filter(i => i.uur !== uurToRemove), startTijd);
+    setRundown(nieuwRundown);
+    const nieuweAantal = aantalUren - 1;
+    const updated = { ...actieveUitzending, aantalUren: nieuweAantal };
+    setActieveUitzending(updated);
+    setUitzendingen(prev => prev.map(u => u.id === updated.id ? updated : u));
+    if (API_KLAAR) sheetPost({ action:"updateUitzendingMeta", uitzendingId:actieveUitzending.id, data:{ aantalUren: nieuweAantal } });
+    if (tab === `uur_${uurToRemove}`) setTab(`uur_${nieuweAantal}`);
   }
 
   const curStr = useSim ? simTime : `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
   const curSec = timeToSec(curStr);
   const startSec = timeToSec(startTijd);
-  const uur1Start = startSec;
-  const uur2Start = startSec + 3600;
 
-  function getActiveId(uur) {
+  function uurStartSec(u) { return startSec + (u - 1) * 3600; }
+  function uurLabel(u) { return `${addSec(startTijd,(u-1)*3600)} – ${addSec(startTijd,u*3600)}`; }
+  function pct(u) { return Math.min(100,Math.max(0,((curSec - uurStartSec(u)) / 3600) * 100)); }
+
+  function getActiveId(u) {
     let active=null;
-    rundown.filter(i=>i.uur===uur).forEach(item=>{
+    rundown.filter(i=>i.uur===u).forEach(item=>{
       if(timeToSec(item.timeBerekend||item.time)<=curSec) active=item.id;
     });
     return active;
@@ -1027,11 +1231,19 @@ export default function App() {
     });
   }
 
-  const items1=rundown.filter(i=>i.uur===1);
-  const items2=rundown.filter(i=>i.uur===2);
-  const pct=(uur)=>Math.min(100,Math.max(0,((curSec-(uur===1?uur1Start:uur2Start))/3600)*100));
-  const uur1Label = `${startTijd} – ${addSec(startTijd,3600)}`;
-  const uur2Label = `${addSec(startTijd,3600)} – ${eindTijd}`;
+  // Dynamische sidebar-tabs
+  const uurTabs = Array.from({length: aantalUren}, (_, i) => ({
+    id: `uur_${i+1}`,
+    l: `UUR ${i+1}`,
+    s: uurLabel(i+1),
+  }));
+  const allTabs = [
+    ...uurTabs,
+    { id:"gasten",  l:"GASTEN",  s:"" },
+    { id:"redactie",l:"REDACTIE",s:"" },
+  ];
+
+  const currentItems = isUurTab ? rundown.filter(i => i.uur === tabUur) : [];
 
   return (
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
@@ -1074,7 +1286,7 @@ export default function App() {
         <span style={{fontSize:10,letterSpacing:1,color:T.textMuted,fontWeight:600,marginRight:4}}>ROL</span>
         {["Eindredactie","Host","Techniek","Nieuwsredactie","Muziekredactie"].map(r=>(
           <button key={r} onClick={()=>setRole(r)} style={{padding:"4px 12px",borderRadius:20,border:"1px solid",
-            fontSize:11,cursor:"pointer",fontWeight:role===r?600:400,transition:"all 0.15s",
+            fontSize:11,cursor:"pointer",transition:"all 0.15s",
             borderColor:role===r?roleColors[r]:T.border,
             background:role===r?`${roleColors[r]}15`:T.bg,
             color:role===r?roleColors[r]:"#1A1F2B",fontWeight:role===r?600:500}}>{r}</button>
@@ -1098,7 +1310,7 @@ export default function App() {
         {/* Sidebar */}
         <div style={{width:180,background:T.bgSidebar,borderRight:`1px solid ${T.border}`,flexShrink:0,overflowY:"auto"}}>
           <div style={{paddingTop:8}}>
-            {[{id:1,l:"UUR 1",s:uur1Label},{id:2,l:"UUR 2",s:uur2Label},{id:3,l:"GASTEN",s:""},{id:4,l:"REDACTIE",s:""}].map(t=>(
+            {allTabs.map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)} style={{width:"100%",textAlign:"left",padding:"10px 16px",
                 background:tab===t.id?"#F9FAFB":"transparent",border:"none",
                 borderLeft:`3px solid ${tab===t.id?BRAND.roze:"transparent"}`,
@@ -1108,6 +1320,26 @@ export default function App() {
               </button>
             ))}
           </div>
+
+          {/* Uren beheren (alleen Eindredactie) */}
+          {role==="Eindredactie" && actieveUitzending && (
+            <div style={{padding:"10px 12px",borderTop:`1px solid ${T.border}`,marginTop:4,display:"flex",flexDirection:"column",gap:4}}>
+              <div style={{fontSize:9,letterSpacing:2,color:T.textLight,marginBottom:4,fontWeight:600,textTransform:"uppercase"}}>Uren</div>
+              <button onClick={handleVoegUurToe}
+                style={{padding:"5px 8px",fontSize:11,background:`${BRAND.roze}10`,border:`1px solid ${BRAND.roze}44`,
+                  color:BRAND.roze,borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>
+                + Uur toevoegen
+              </button>
+              {aantalUren > 1 && (
+                <button onClick={handleVerwijderLaatsteUur}
+                  style={{padding:"5px 8px",fontSize:11,background:"#FEF2F2",border:"1px solid #FECACA",
+                    color:"#EF4444",borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>
+                  − Uur {aantalUren} verwijderen
+                </button>
+              )}
+            </div>
+          )}
+
           <div style={{padding:"12px 16px 0",marginTop:8,borderTop:`1px solid ${T.border}`}}>
             <div style={{fontSize:9,letterSpacing:2,color:T.textLight,marginBottom:8,fontWeight:600}}>LEGENDA</div>
             {Object.entries(typeConfig).map(([k,v])=>(
@@ -1133,44 +1365,44 @@ export default function App() {
             </div>
           )}
 
-          {actieveUitzending && (tab===1||tab===2) && <>
+          {actieveUitzending && isUurTab && <>
             <div style={{marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                 <span style={{fontSize:11,color:T.textMuted,fontWeight:500}}>
-                  UUR {tab} — {tab===1?uur1Label:uur2Label}
+                  UUR {tabUur} — {uurLabel(tabUur)}
                 </span>
-                {curSec>=(tab===1?uur1Start:uur2Start)&&curSec<(tab===1?uur2Start:uur2Start+3600)&&(
+                {curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur) + 3600 && (
                   <span style={{fontSize:11,color:BRAND.roze,fontWeight:700,background:`${BRAND.roze}15`,padding:"2px 10px",borderRadius:10}}>▶ LIVE {curStr}</span>
                 )}
               </div>
               <div style={{height:4,background:T.border,borderRadius:2}}>
-                <div style={{height:"100%",borderRadius:2,background:BRAND.gradient,transition:"width 1s linear",width:`${pct(tab)}%`}}/>
+                <div style={{height:"100%",borderRadius:2,background:BRAND.gradient,transition:"width 1s linear",width:`${pct(tabUur)}%`}}/>
               </div>
             </div>
-            <DriftBalk items={rundown} uur={tab} startTijd={startTijd}/>
-            {(tab===1?items1:items2).map(item=>(
+            <DriftBalk items={rundown} uur={tabUur} startTijd={startTijd}/>
+            {currentItems.map(item=>(
               <div key={item.id} ref={el=>itemRefs.current[item.id]=el}
                 style={{scrollMarginTop:12, outline:highlightId===item.id?"2px solid #FF00E7":"none", outlineOffset:2, borderRadius:6, transition:"outline 0.3s"}}>
                 <ItemCard item={item} role={role}
                   onUpdate={handleUpdate} onDuurChange={handleDuurChange}
                   onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
                   onDelete={role==="Eindredactie"?handleDelete:null}
-                  isActive={getActiveId(tab)===item.id}
+                  isActive={getActiveId(tabUur)===item.id}
                   isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
               </div>
             ))}
-            {role==="Eindredactie" && <ToevoegenKnop uur={tab} onAdd={handleAddItem}/>}
+            {role==="Eindredactie" && <ToevoegenKnop uur={tabUur} onAdd={handleAddItem}/>}
           </>}
 
-          {actieveUitzending && tab===3 && <GastenTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
-          {actieveUitzending && tab===4 && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
+          {actieveUitzending && tab==="gasten" && <GastenTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
+          {actieveUitzending && tab==="redactie" && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
         </div>
-        {/* Timeline panel — alleen bij uur 1 of 2 */}
-        {actieveUitzending && (tab===1||tab===2) && role==="Eindredactie" && (
+        {/* Timeline panel — alleen bij uur-tabs */}
+        {actieveUitzending && isUurTab && role==="Eindredactie" && (
           <TimelinePanel
             items={rundown}
-            uur={tab}
-            activeId={getActiveId(tab)}
+            uur={tabUur}
+            activeId={getActiveId(tabUur)}
             onReorder={handleReorder}
             onDelete={handleDelete}
             onAdd={(uur,type)=>handleAddItem(uur,type,"einde")}
@@ -1180,9 +1412,15 @@ export default function App() {
         </div>
       </div>
 
-      <UitzendingModal open={showUitzendingModal} uitzendingen={uitzendingen}
-        onSelect={handleSelectUitzending} onCreate={handleCreate}
-        onClose={uitzendingen.length>0?()=>setShowUitzendingModal(false):null}/>
+      <UitzendingModal
+        open={showUitzendingModal}
+        uitzendingen={uitzendingen}
+        onSelect={handleSelectUitzending}
+        onCreate={handleCreate}
+        onClose={uitzendingen.length>0?()=>setShowUitzendingModal(false):null}
+        onDelete={handleDeleteUitzending}
+        onCopy={handleCopyUitzending}
+      />
       <ZoekModal open={zoekOpen} onClose={()=>setZoekOpen(false)}
         onSelect={handleTrackSelect} spotifyToken={spotifyToken}/>
     </div>
