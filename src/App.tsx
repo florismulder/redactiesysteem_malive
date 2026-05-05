@@ -27,26 +27,6 @@ const typeConfig = {
   special:   { label:"SPECIAL",  color:"#00796B", icon:"★",  bg:"#E8F5F3" },
 };
 
-// ─── kleuren (licht thema) ────────────────────────────────
-const BRAND = {
-  roze: "#FF00E7",
-  paars: "#6A0DAD",
-  gradient: "linear-gradient(135deg, #FF00E7, #6A0DAD)",
-};
-const roleColors = {
-  Eindredactie: "#CC00BB", Host: "#0097A7",
-  Techniek: "#F57F17", Nieuwsredactie: "#2E7D32",
-  Muziekredactie: "#6A0DAD",
-};
-const typeConfig = {
-  muziek:    { label:"MUZIEK",    color:"#1565C0", icon:"♪",  bg:"#EBF3FF" },
-  jingle:    { label:"JINGLE",    color:"#C62828", icon:"▶",  bg:"#FFEBEE" },
-  tekst:     { label:"TEKST",     color:"#CC00BB", icon:"✎",  bg:"#FFF0FD" },
-  nieuws:    { label:"NIEUWS",    color:"#2E7D32", icon:"📰", bg:"#F0FAF0" },
-  interview: { label:"INTERVIEW", color:"#E64A19", icon:"🎙", bg:"#FFF3EE" },
-  special:   { label:"SPECIAL",  color:"#00796B", icon:"★",  bg:"#E8F5F3" },
-};
-
 // ─── thema kleuren ────────────────────────────────────────
 const T = {
   bg:         "#F5F6F8",
