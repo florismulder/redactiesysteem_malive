@@ -718,13 +718,15 @@ const whoVis = {
   Muziekredactie:["Muziekredactie","Eindredactie"],
 };
 
-function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, isActive, isPast }) {
+function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, isActive, isPast }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
   const canEdit = role==="Eindredactie"||item.who.includes(role);
+  const kanHernoemen = role==="Eindredactie" && item.type !== "muziek";
   const dimmed = isPast&&!isActive;
   const upd = (k,v)=>onUpdate(item.id,{...item.extra,[k]:v});
   const tidAfwijkt = item.timeBerekend && item.timeBerekend!==item.time;
+  const displayNaam = item.extra._naam || item.what;
 
   return (
     <div style={{display:"flex",alignItems:"flex-start",opacity:dimmed?0.35:1,transition:"opacity 0.3s",
@@ -749,7 +751,21 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, isActi
           paddingBottom:canEdit?7:0,borderBottom:canEdit?`1px solid ${tc.color}33`:"none"}}>
           <span style={{fontSize:10,letterSpacing:1,color:tc.color,fontWeight:700,
             background:`${tc.color}15`,padding:"2px 7px",borderRadius:4}}>{tc.icon} {tc.label}</span>
-          <span style={{fontSize:13,color:"#0D0F12",fontWeight:600}}>{item.what}</span>
+          {item.type !== "muziek" && (
+            kanHernoemen ? (
+              <input
+                value={displayNaam}
+                onChange={e=>onRename(item.id, e.target.value)}
+                onClick={e=>e.stopPropagation()}
+                style={{fontSize:13,color:"#0D0F12",fontWeight:600,background:"transparent",
+                  border:"none",borderBottom:"1px dashed #C8CDD5",outline:"none",
+                  padding:"0 2px",minWidth:60,maxWidth:220,
+                  fontFamily:"'Inter','Segoe UI',sans-serif"}}
+              />
+            ) : (
+              <span style={{fontSize:13,color:"#0D0F12",fontWeight:600}}>{displayNaam}</span>
+            )
+          )}
           <div style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
             {item.who.map(w=>(
               <span key={w} style={{fontSize:10,padding:"2px 7px",borderRadius:10,
@@ -1154,6 +1170,9 @@ export default function App() {
   }
 
   function handleUpdate(id, newExtra) { setRundown(prev=>prev.map(r=>r.id===id?{...r,extra:newExtra}:r)); }
+  function handleRename(id, newWhat) {
+    setRundown(prev=>prev.map(r=>r.id===id?{...r,what:newWhat,extra:{...r.extra,_naam:newWhat}}:r));
+  }
   function handleDuurChange(id, sec) { setRundown(prev=>herbereken(prev.map(r=>r.id===id?{...r,duurWerkelijkSec:sec}:r),startTijd)); }
   function handleTrackSelect(track) {
     if (!zoekId) return;
@@ -1228,6 +1247,7 @@ export default function App() {
   return (
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+      <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23FF00E7'/><text y='72' x='50' text-anchor='middle' font-size='62' font-family='serif'>📻</text></svg>"/>
       <style>{`
         input::placeholder, textarea::placeholder { color: #555E6E !important; font-style: italic; }
         input:not([value=""]), textarea:not(:empty) { color: #1A1D23; }
@@ -1365,6 +1385,7 @@ export default function App() {
                 style={{scrollMarginTop:12, outline:highlightId===item.id?"2px solid #FF00E7":"none", outlineOffset:2, borderRadius:6, transition:"outline 0.3s"}}>
                 <ItemCard item={item} role={role}
                   onUpdate={handleUpdate} onDuurChange={handleDuurChange}
+                  onRename={handleRename}
                   onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
                   onDelete={role==="Eindredactie"?handleDelete:null}
                   isActive={getActiveId(tabUur)===item.id}
