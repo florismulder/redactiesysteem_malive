@@ -558,7 +558,7 @@ function ZoekModal({ open, onClose, onSelect, spotifyToken }) {
 // ════════════════════════════════════════════════════════════
 //  DuurInvoer
 // ════════════════════════════════════════════════════════════
-function DuurInvoer({ item, onChange, onZoek }) {
+function DuurInvoer({ item, onChange, onZoek, showZoek=true }) {
   const [val, setVal] = useState(toMMSS(item.duurWerkelijkSec));
   useEffect(()=>setVal(toMMSS(item.duurWerkelijkSec)),[item.duurWerkelijkSec]);
   const drift = item.duurWerkelijkSec - item.duurGeplandSec;
@@ -580,11 +580,11 @@ function DuurInvoer({ item, onChange, onZoek }) {
           {drift>0?"+":""}{toMMSS(Math.abs(drift))}
         </span>
       )}
-      <button onClick={onZoek}
+      {showZoek && <button onClick={onZoek}
         style={{marginLeft:"auto",padding:"4px 12px",fontSize:11,background:"#F3F4F6",
           border:`1px solid ${T.borderDark}`,color:T.text,borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",fontWeight:500}}>
         🔍 Zoek nummer
-      </button>
+      </button>}
       {item.spotifyUri&&<span style={{fontSize:10,color:"#1DB954",fontWeight:600}}>● Spotify</span>}
     </div>
   );
@@ -759,7 +759,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRena
                 onClick={e=>e.stopPropagation()}
                 style={{fontSize:13,color:"#0D0F12",fontWeight:600,background:"transparent",
                   border:"none",borderBottom:"1px dashed #C8CDD5",outline:"none",
-                  padding:"0 2px",minWidth:60,maxWidth:220,
+                  padding:"0 2px",minWidth:120,maxWidth:440,
                   fontFamily:"'Inter','Segoe UI',sans-serif"}}
               />
             ) : (
@@ -787,30 +787,38 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRena
             </div>
             <DuurInvoer item={item} onChange={onDuurChange} onZoek={()=>onZoek(item.id)}/>
           </>}
-          {item.type==="tekst"&&<EF label="Presentatietekst" value={item.extra.tekst} onChange={v=>{
-            upd("tekst",v);
-            const woorden = v.trim().split(/\s+/).filter(Boolean).length;
-            const sec = Math.max(10, Math.ceil(woorden / 130 * 60));
-            onDuurChange(item.id, sec);
-          }} multiline placeholder="Voer tekst in…"/>}
+          {item.type==="tekst"&&<>
+            <EF label="Presentatietekst" value={item.extra.tekst} onChange={v=>{
+              upd("tekst",v);
+              const woorden = v.trim().split(/\s+/).filter(Boolean).length;
+              const sec = Math.max(10, Math.ceil(woorden / 130 * 60));
+              onDuurChange(item.id, sec);
+            }} multiline placeholder="Voer tekst in…"/>
+            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
+          </>}
           {item.type==="jingle"&&<div style={{fontSize:12,color:"#2D3444",fontStyle:"italic",fontWeight:500,padding:"4px 0"}}>{item.extra.label}</div>}
           {item.type==="nieuws"&&<>
             <EF label="Intro" value={item.extra.intro} onChange={v=>upd("intro",v)} placeholder="Spreektekst intro…"/>
             <EF label="Berichten" value={item.extra.berichten} onChange={v=>upd("berichten",v)} multiline placeholder="Voer nieuwsberichten in…"/>
+            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
-          {item.type==="interview"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <EF label="Gast" value={item.extra.wie} onChange={v=>upd("wie",v)} placeholder="Naam gast"/>
-            <EF label="Telefoonnummer" value={item.extra.tel} onChange={v=>upd("tel",v)} placeholder="06-…"/>
-            <EF label="Functie" value={item.extra.functie} onChange={v=>upd("functie",v)} placeholder="Functie"/>
-            <div/>
-            <div style={{gridColumn:"span 2"}}><EF label="Introductietekst" value={item.extra.intro} onChange={v=>upd("intro",v)} multiline placeholder="Introductietekst…"/></div>
-          </div>}
+          {item.type==="interview"&&<>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <EF label="Gast" value={item.extra.wie} onChange={v=>upd("wie",v)} placeholder="Naam gast"/>
+              <EF label="Telefoonnummer" value={item.extra.tel} onChange={v=>upd("tel",v)} placeholder="06-…"/>
+              <EF label="Functie" value={item.extra.functie} onChange={v=>upd("functie",v)} placeholder="Functie"/>
+              <div/>
+              <div style={{gridColumn:"span 2"}}><EF label="Introductietekst" value={item.extra.intro} onChange={v=>upd("intro",v)} multiline placeholder="Introductietekst…"/></div>
+            </div>
+            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
+          </>}
           {item.type==="special"&&item.what.includes("LP")&&<>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <EF label="LP / Album" value={item.extra.lp_naam} onChange={v=>upd("lp_naam",v)} placeholder="Albumtitel"/>
               <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiest"/>
             </div>
             <EF label="Tekst over LP" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Uitgebreide beschrijving…"/>
+            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
           {item.type==="special"&&item.what.includes("Plaat")&&<>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -818,14 +826,17 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRena
               <EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Plaattitel"/>
             </div>
             <EF label="Verhaal achter de plaat" value={item.extra.verhaal} onChange={v=>upd("verhaal",v)} multiline placeholder="Het verhaal…"/>
+            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
           {item.type==="special"&&item.what==="Reportage"&&<>
             <EF label="Omschrijving" value={item.extra.omschrijving} onChange={v=>upd("omschrijving",v)} multiline placeholder="Waar gaat de reportage over?"/>
             <EF label="Link / bestand" value={item.extra.link} onChange={v=>upd("link",v)} placeholder="URL of bestandsnaam"/>
+            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
-          {item.type==="special"&&!["LP","Plaat","Reportage"].some(w=>item.what.includes(w))&&
+          {item.type==="special"&&!["LP","Plaat","Reportage"].some(w=>item.what.includes(w))&&<>
             <EF label="Tekst / notitie" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Notitie…"/>
-          }
+            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
+          </>}
         </>}
       </div>
     </div>
