@@ -1094,15 +1094,13 @@ export default function App() {
 
   const debouncedRundown = useDebounce(rundown, 1200);
   const firstLoad = useRef(true);
-  useEffect(()=>{
+  const pendingSave = useRef(false);
+
+  function slaOp(rd) {
     if (!API_KLAAR || !actieveUitzending) return;
-    if (firstLoad.current) { firstLoad.current=false; return; }
     setSyncStatus("opslaan");
-    // Volgorde als speciale rij
-    const orderPromise = sheetPost({ action:"saveRundownItem", uitzendingId:actieveUitzending.id,
-      data:{ itemId:"_order_", extra:{ ids: debouncedRundown.map(i=>i.id) }, duurWerkelijkSec:0, spotifyUri:null }});
-    // Alleen items met echte inhoud
-    const teSlaan = debouncedRundown.filter(item=>{
+    pendingSave.current = true;
+    const teSlaan = rd.filter(item=>{
       if (item.duurWerkelijkSec !== item.duurGeplandSec) return true;
       const e = item.extra || {};
       if (item.type==="muziek")    return !!(e.artiest||e.nummer);
@@ -1112,13 +1110,42 @@ export default function App() {
       if (e.lp_naam!==undefined)   return !!(e.lp_naam||e.artiest||e.tekst);
       return false;
     });
-    Promise.all([orderPromise, ...teSlaan.map(item=>
-      sheetPost({ action:"saveRundownItem", uitzendingId:actieveUitzending.id, data:{
-        itemId:item.id, extra:item.extra,
-        duurWerkelijkSec:item.duurWerkelijkSec, spotifyUri:item.spotifyUri,
-      }})
-    )]).then(results=>setSyncStatus(results.every(r=>r?.ok)?"ok":"fout"));
+    const requests = [
+      { action:"saveRundownItem", uitzendingId:actieveUitzending.id,
+        data:{ itemId:"_order_", extra:{ ids: rd.map(i=>i.id) }, duurWerkelijkSec:0, spotifyUri:null }},
+      ...teSlaan.map(item=>({ action:"saveRundownItem", uitzendingId:actieveUitzending.id,
+        data:{ itemId:item.id, extra:item.extra, duurWerkelijkSec:item.duurWerkelijkSec, spotifyUri:item.spotifyUri }}))
+    ];
+    // Sequentieel i.p.v. parallel — voorkomt GAS concurrency-fouten
+    (async()=>{
+      const results = [];
+      for (const req of requests) {
+        results.push(await sheetPost(req));
+      }
+      const ok = results.every(r=>r?.ok);
+      setSyncStatus(ok?"ok":"fout");
+      pendingSave.current = false;
+      return ok;
+    })();
+  }
+
+  useEffect(()=>{
+    if (!API_KLAAR || !actieveUitzending) return;
+    if (firstLoad.current) { firstLoad.current=false; return; }
+    slaOp(debouncedRundown);
   },[debouncedRundown]);
+
+  // Waarschuw bij afsluiten als er wijzigingen zijn
+  useEffect(()=>{
+    const handler = (e) => {
+      if (syncStatus==="opslaan"||pendingSave.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return ()=>window.removeEventListener("beforeunload", handler);
+  },[syncStatus]);
 
   async function handleCreate(data) {
     const id = "uitz_" + Date.now();
@@ -1320,6 +1347,13 @@ export default function App() {
 
         <div style={{flex:1}}/>
         <SyncBadge status={syncStatus}/>
+        {actieveUitzending && API_KLAAR && syncStatus!=="lokaal" && (
+          <button onClick={()=>slaOp(rundown)}
+            style={{padding:"4px 10px",fontSize:10,fontWeight:700,borderRadius:4,cursor:"pointer",
+              background:syncStatus==="fout"?"#EF4444":BRAND.paars,color:"#fff",border:"none"}}>
+            💾 Nu opslaan
+          </button>
+        )}
         <div style={{fontSize:14,color:T.text,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>
           {String(now.getHours()).padStart(2,"0")}:{String(now.getMinutes()).padStart(2,"0")}:{String(now.getSeconds()).padStart(2,"0")}
         </div>
