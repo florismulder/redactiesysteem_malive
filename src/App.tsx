@@ -560,7 +560,6 @@ function DuurInvoer({ item, onChange, onZoek, showZoek=true }) {
           border:`1px solid ${T.borderDark}`,color:T.text,borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",fontWeight:500}}>
         🔍 Zoek nummer
       </button>}
-      {item.spotifyUri&&<span style={{fontSize:10,color:"#1DB954",fontWeight:600}}>● Spotify</span>}
     </div>
   );
 }
@@ -1069,6 +1068,7 @@ export default function App() {
     if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
     sheetGet("getRundown", actieveUitzending.id).then(res=>{
       if (res?.ok) {
+        isLoading.current = true; // herlaad-debounce overslaan
         setRundown(prev=>{
           const savedData = res.data || {};
           const withData = herbereken(prev.map(item=>{
@@ -1106,7 +1106,7 @@ export default function App() {
   },[actieveUitzending]);
 
   const debouncedRundown = useDebounce(rundown, 1500);
-  const firstLoad = useRef(true);
+  const isLoading = useRef(false);
   const pendingSave = useRef(false);
   const saveLock = useRef(false);
   const saveQueue = useRef(null);
@@ -1122,10 +1122,10 @@ export default function App() {
       if (item.duurWerkelijkSec !== item.duurGeplandSec) return true;
       const e = item.extra || {};
       if (item.type==="muziek")    return !!(e.artiest||e.nummer);
+      if (item.type==="special")   return !!(e.artiest||e.nummer||e.tekst||e.lp_naam||e.verhaal||e.omschrijving||e.link||e.stem_info);
       if (e.berichten!==undefined) return !!(e.berichten||e.intro);
       if (e.wie!==undefined)       return !!(e.wie||e.tel||e.functie||e.intro||e.vragen||e.onderwerp||e.achtergrond||e.bronnen);
       if (e.tekst!==undefined)     return !!e.tekst;
-      if (e.lp_naam!==undefined)   return !!(e.lp_naam||e.artiest||e.tekst);
       return false;
     });
 
@@ -1150,7 +1150,7 @@ export default function App() {
 
   useEffect(()=>{
     if (!API_KLAAR || !actieveUitzending) return;
-    if (firstLoad.current) { firstLoad.current=false; return; }
+    if (isLoading.current) { isLoading.current = false; return; }
     slaOp(debouncedRundown);
   },[debouncedRundown]);
 
@@ -1175,7 +1175,7 @@ export default function App() {
   }
 
   function handleSelectUitzending(u) {
-    firstLoad.current = true;
+    isLoading.current = true;
     setActieveUitzending(u);
     setSimTime(cleanTime(u.startTijd || "12:00"));
     setShowUitzendingModal(false);
