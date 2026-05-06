@@ -1084,10 +1084,21 @@ export default function App() {
           const ids = res.order?.extra?.ids;
           if (!ids?.length) return withData;
           const map = Object.fromEntries(withData.map(i=>[String(i.id),i]));
-          const inOrder = ids.map(id=>map[String(id)]).filter(Boolean);
-          const seen = new Set(ids.map(String));
-          const rest = withData.filter(i=>!seen.has(String(i.id)));
-          return herbereken([...inOrder,...rest], startTijd);
+          const inOrder = ids.map(id=>{
+            const existing = map[String(id)];
+            if (existing) return existing;
+            // Reconstrueer toegevoegde items (niet in buildBase) vanuit opgeslagen data
+            const s = savedData[String(id)];
+            if (s?.type) return {
+              id: Number(id)||id, type:s.type, what:s.what||s.type,
+              who:s.who||[], uur:s.uur||1, extra:s.extra||{},
+              duurGeplandSec:s.duurWerkelijkSec||180,
+              duurWerkelijkSec:s.duurWerkelijkSec||180, spotifyUri:s.spotifyUri||null,
+            };
+            return null;
+          }).filter(Boolean);
+          // Geen 'rest' toevoegen: verwijderde items blijven verwijderd
+          return herbereken(inOrder, startTijd);
         });
         setSyncStatus("ok");
       } else setSyncStatus("fout");
@@ -1118,21 +1129,12 @@ export default function App() {
       return false;
     });
 
-    // Begrens tekstvelden zodat de URL niet te lang wordt
-    function kapExtra(extra) {
-      if (!extra) return extra;
-      const MAX = 800;
-      const r = {};
-      for (const [k,v] of Object.entries(extra))
-        r[k] = typeof v === "string" && v.length > MAX ? v.slice(0, MAX) : v;
-      return r;
-    }
-
     const requests = [
       { action:"saveRundownItem", uitzendingId:actieveUitzending.id,
         data:{ itemId:"_order_", extra:{ ids: rd.map(i=>i.id) }, duurWerkelijkSec:0, spotifyUri:null }},
       ...teSlaan.map(item=>({ action:"saveRundownItem", uitzendingId:actieveUitzending.id,
-        data:{ itemId:item.id, extra:kapExtra(item.extra), duurWerkelijkSec:item.duurWerkelijkSec, spotifyUri:item.spotifyUri }}))
+        data:{ itemId:item.id, extra:item.extra, duurWerkelijkSec:item.duurWerkelijkSec,
+          spotifyUri:item.spotifyUri, type:item.type, what:item.what, who:item.who, uur:item.uur }}))
     ];
 
     (async()=>{
