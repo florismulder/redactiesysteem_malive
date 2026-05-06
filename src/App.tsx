@@ -1077,7 +1077,7 @@ export default function App() {
     if (!API_KLAAR || !actieveUitzending) return;
     if (firstLoad.current) { firstLoad.current=false; return; }
     setSyncStatus("opslaan");
-    const items = debouncedRundown.filter(i=>i.type==="muziek"||i.extra?.berichten!==undefined||i.extra?.intro!==undefined||i.extra?.wie!==undefined);
+    const items = debouncedRundown;
     Promise.all(items.map(item=>
       sheetPost({ action:"saveRundownItem", uitzendingId:actieveUitzending.id, data:{
         itemId:item.id, extra:item.extra,
