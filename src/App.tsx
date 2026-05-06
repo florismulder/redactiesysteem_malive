@@ -221,11 +221,12 @@ async function sheetGet(action, uitzendingId) {
 async function sheetPost(body) {
   if (!API_KLAAR) return null;
   try {
-    const r = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(body),
+    const params = new URLSearchParams({
+      action: body.action,
+      uitzendingId: body.uitzendingId,
+      data: JSON.stringify(body.data),
     });
+    const r = await fetch(`${API_URL}?${params.toString()}`);
     return await r.json();
   } catch { return null; }
 }
@@ -1029,20 +1030,33 @@ export default function App() {
     setSyncStatus("laden");
     if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
     sheetGet("getRundown", actieveUitzending.id).then(res=>{
-      if (res?.ok && res.data) {
-        if (Array.isArray(res.data)) {
-          // Nieuw formaat: volledig draaiboek als JSON-blok
-          setRundown(herbereken(res.data, startTijd));
+      if (res?.ok) {
+        const savedData = res.data || {};
+        const savedOrder = res.order;
+        if (Array.isArray(savedData)) {
+          // Legacy: volledig draaiboek blob
+          setRundown(herbereken(savedData, startTijd));
         } else {
-          // Oud formaat: per-item (backward compat)
-          setRundown(prev=>herbereken(prev.map(item=>{
-            const saved = res.data[item.id];
-            if (!saved) return item;
-            const extra = saved.extra || saved;
-            return { ...item,
-              extra:{...item.extra,...extra},
-              duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec };
-          }), startTijd));
+          setRundown(prev=>{
+            // Pas per-item data toe
+            const withData = prev.map(item=>{
+              const saved = savedData[item.id];
+              if (!saved) return item;
+              const extra = saved.extra || saved;
+              return { ...item,
+                extra:{...item.extra,...extra},
+                duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec };
+            });
+            // Pas volgorde toe indien opgeslagen
+            if (savedOrder?.length) {
+              const itemMap = Object.fromEntries(withData.map(i=>[i.id,i]));
+              const inOrder = savedOrder.map(id=>itemMap[id]).filter(Boolean);
+              const orderedIds = new Set(savedOrder);
+              const rest = withData.filter(i=>!orderedIds.has(i.id));
+              return herbereken([...inOrder,...rest], startTijd);
+            }
+            return herbereken(withData, startTijd);
+          });
         }
         setSyncStatus("ok");
       } else setSyncStatus("fout");
@@ -1055,10 +1069,16 @@ export default function App() {
     if (!API_KLAAR || !actieveUitzending) return;
     if (firstLoad.current) { firstLoad.current=false; return; }
     setSyncStatus("opslaan");
-    const toSave = debouncedRundown.map(({ id, type, what, who, uur, extra, duurGeplandSec, duurWerkelijkSec }) =>
-      ({ id, type, what, who, uur, extra, duurGeplandSec, duurWerkelijkSec }));
-    sheetPost({ action:"saveRundown", uitzendingId:actieveUitzending.id, data:toSave })
-      .then(r => setSyncStatus(r?.ok ? "ok" : "fout"));
+    // Sla volgorde op als kleine array van ID's
+    const orderPromise = sheetPost({ action:"saveRundownOrder", uitzendingId:actieveUitzending.id, data:debouncedRundown.map(i=>i.id) });
+    // Sla content per item op
+    const itemPromises = debouncedRundown.map(item=>
+      sheetPost({ action:"saveRundownItem", uitzendingId:actieveUitzending.id, data:{
+        itemId:item.id, extra:item.extra, duurWerkelijkSec:item.duurWerkelijkSec,
+      }})
+    );
+    Promise.all([orderPromise,...itemPromises])
+      .then(results=>setSyncStatus(results.every(r=>r?.ok)?"ok":"fout"));
   },[debouncedRundown]);
 
   async function handleCreate(data) {
