@@ -457,40 +457,25 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
 // ════════════════════════════════════════════════════════════
 //  ZoekModal
 // ════════════════════════════════════════════════════════════
-function ZoekModal({ open, onClose, onSelect, spotifyToken }) {
+function ZoekModal({ open, onClose, onSelect }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [bron, setBron] = useState(spotifyToken ? "spotify" : "itunes");
 
   useEffect(()=>{ if(open){setQ("");setResults([]);} },[open]);
-  useEffect(()=>{ if(spotifyToken) setBron("spotify"); },[spotifyToken]);
 
   async function zoek() {
     if (!q.trim()) return;
     setLoading(true); setResults([]);
     try {
-      if (bron==="spotify" && spotifyToken) {
-        const r = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=8`,
-          { headers:{ Authorization:`Bearer ${spotifyToken}` } });
-        const d = await r.json();
-        setResults((d.tracks?.items||[]).map(t=>({
-          id:t.id, artiest:t.artists.map(a=>a.name).join(", "),
-          nummer:t.name, album:t.album.name,
-          duurSec:Math.round(t.duration_ms/1000),
-          cover:t.album.images?.[2]?.url, uri:t.uri,
-        })));
-      } else {
-        // iTunes Search API — gratis, geen account nodig
-        const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=10&lang=nl_nl`);
-        const d = await r.json();
-        setResults((d.results||[]).map(t=>({
-          id:t.trackId, artiest:t.artistName,
-          nummer:t.trackName, album:t.collectionName,
-          duurSec:Math.round((t.trackTimeMillis||0)/1000),
-          cover:t.artworkUrl60, uri:null,
-        })));
-      }
+      const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=10&lang=nl_nl`);
+      const d = await r.json();
+      setResults((d.results||[]).map(t=>({
+        id:t.trackId, artiest:t.artistName,
+        nummer:t.trackName, album:t.collectionName,
+        duurSec:Math.round((t.trackTimeMillis||0)/1000),
+        cover:t.artworkUrl60,
+      })));
     } catch { setResults([{fout:true}]); }
     setLoading(false);
   }
@@ -502,18 +487,7 @@ function ZoekModal({ open, onClose, onSelect, spotifyToken }) {
       <div style={{background:"#fff",borderRadius:10,width:500,maxHeight:"75vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}
         onClick={e=>e.stopPropagation()}>
         <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:14,fontWeight:700,color:T.text}}>Zoek nummer</span>
-          <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
-            {["itunes","spotify"].map(b=>(
-              <button key={b} onClick={()=>setBron(b)} style={{
-                padding:"4px 12px",fontSize:11,borderRadius:20,cursor:"pointer",
-                background:bron===b?"#F3F4F6":"transparent",
-                border:`1px solid ${bron===b?T.borderDark:T.border}`,
-                color:bron===b?T.text:T.textMuted,
-                opacity:b==="spotify"&&!spotifyToken?0.4:1,
-              }}>{b==="spotify"?"🎧 Spotify":"🎵 iTunes"}</button>
-            ))}
-          </div>
+          <span style={{fontSize:14,fontWeight:700,color:T.text}}>🎵 Zoek nummer via iTunes</span>
         </div>
         <div style={{padding:"12px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:8}}>
           <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&zoek()}
@@ -585,7 +559,7 @@ function DuurInvoer({ item, onChange, onZoek, showZoek=true }) {
           border:`1px solid ${T.borderDark}`,color:T.text,borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",fontWeight:500}}>
         🔍 Zoek nummer
       </button>}
-      {item.spotifyUri&&<span style={{fontSize:10,color:"#1DB954",fontWeight:600}}>● Spotify</span>}
+
     </div>
   );
 }
@@ -1020,7 +994,7 @@ export default function App() {
   const [useSim, setUseSim] = useState(true);
   const [zoekOpen, setZoekOpen] = useState(false);
   const [zoekId, setZoekId] = useState(null);
-  const [spotifyToken, setSpotifyToken] = useState("");
+
   const [syncStatus, setSyncStatus] = useState(API_KLAAR ? "laden" : "lokaal");
   const [highlightId, setHighlightId] = useState(null);
   const itemRefs = useRef({});
@@ -1057,15 +1031,20 @@ export default function App() {
     if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
     sheetGet("getRundown", actieveUitzending.id).then(res=>{
       if (res?.ok && res.data) {
-        setRundown(prev=>herbereken(prev.map(item=>{
-          const saved = res.data[item.id];
-          if (!saved) return item;
-          const extra = saved.extra || saved;
-          return { ...item,
-            extra:{...item.extra,...extra},
-            duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec,
-            spotifyUri:saved.spotifyUri||extra.spotifyUri||item.spotifyUri };
-        }), startTijd));
+        if (Array.isArray(res.data)) {
+          // Nieuw formaat: volledig draaiboek als JSON-blok
+          setRundown(herbereken(res.data, startTijd));
+        } else {
+          // Oud formaat: per-item (backward compat)
+          setRundown(prev=>herbereken(prev.map(item=>{
+            const saved = res.data[item.id];
+            if (!saved) return item;
+            const extra = saved.extra || saved;
+            return { ...item,
+              extra:{...item.extra,...extra},
+              duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec };
+          }), startTijd));
+        }
         setSyncStatus("ok");
       } else setSyncStatus("fout");
     });
@@ -1077,13 +1056,10 @@ export default function App() {
     if (!API_KLAAR || !actieveUitzending) return;
     if (firstLoad.current) { firstLoad.current=false; return; }
     setSyncStatus("opslaan");
-    const items = debouncedRundown;
-    Promise.all(items.map(item=>
-      sheetPost({ action:"saveRundownItem", uitzendingId:actieveUitzending.id, data:{
-        itemId:item.id, extra:item.extra,
-        duurWerkelijkSec:item.duurWerkelijkSec, spotifyUri:item.spotifyUri,
-      }})
-    )).then(results=>setSyncStatus(results.every(r=>r?.ok)?"ok":"fout"));
+    const toSave = debouncedRundown.map(({ id, type, what, who, uur, extra, duurGeplandSec, duurWerkelijkSec }) =>
+      ({ id, type, what, who, uur, extra, duurGeplandSec, duurWerkelijkSec }));
+    sheetPost({ action:"saveRundown", uitzendingId:actieveUitzending.id, data:toSave })
+      .then(r => setSyncStatus(r?.ok ? "ok" : "fout"));
   },[debouncedRundown]);
 
   async function handleCreate(data) {
@@ -1309,12 +1285,6 @@ export default function App() {
         <button onClick={()=>setUseSim(s=>!s)} style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,
           background:useSim?`${BRAND.roze}15`:T.bg,border:`1px solid ${useSim?BRAND.roze:T.border}`,
           color:useSim?BRAND.roze:"#1F2937"}}>{useSim?"SIM AAN":"SIM UIT"}</button>
-        <button onClick={()=>setSpotifyToken(t=>t?"":prompt("Plak je Spotify access token:")||"")}
-          style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,
-            background:spotifyToken?"#DCFCE7":T.bg,border:`1px solid ${spotifyToken?"#86EFAC":T.border}`,
-            color:spotifyToken?"#15803D":T.textMuted}}>
-          {spotifyToken?"🎧 Spotify ✓":"🎧 Spotify"}
-        </button>
       </div>
 
       <div style={{display:"flex",height:"calc(100vh - 100px)",overflow:"hidden"}}>
@@ -1434,7 +1404,7 @@ export default function App() {
         onCopy={handleCopyUitzending}
       />
       <ZoekModal open={zoekOpen} onClose={()=>setZoekOpen(false)}
-        onSelect={handleTrackSelect} spotifyToken={spotifyToken}/>
+        onSelect={handleTrackSelect}/>
     </div>
   );
 }
