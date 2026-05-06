@@ -686,16 +686,16 @@ function EF({ label, value, onChange, multiline=false, placeholder="" }) {
 // ════════════════════════════════════════════════════════════
 const whoVis = {
   Eindredactie:  null,
-  Host:          ["Host","Eindredactie"],
+  Host:          null,
   Techniek:      ["Techniek","Eindredactie"],
   Nieuwsredactie:["Nieuwsredactie","Eindredactie"],
   Muziekredactie:["Muziekredactie","Eindredactie"],
 };
 
-function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, isActive, isPast }) {
+function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, isActive, isPast, onNaarGasten }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
-  const canEdit = role==="Eindredactie"||item.who.includes(role);
+  const canEdit = role!=="Host" && (role==="Eindredactie"||item.who.includes(role));
   const kanHernoemen = role==="Eindredactie" && item.type !== "muziek";
   const dimmed = isPast&&!isActive;
   const upd = (k,v)=>onUpdate(item.id,{...item.extra,[k]:v});
@@ -778,12 +778,16 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRena
           </>}
           {item.type==="interview"&&<>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <EF label="Gast" value={item.extra.wie} onChange={v=>upd("wie",v)} placeholder="Naam gast"/>
-              <EF label="Telefoonnummer" value={item.extra.tel} onChange={v=>upd("tel",v)} placeholder="06-…"/>
-              <EF label="Functie" value={item.extra.functie} onChange={v=>upd("functie",v)} placeholder="Functie"/>
-              <div/>
-              <div style={{gridColumn:"span 2"}}><EF label="Introductietekst" value={item.extra.intro} onChange={v=>upd("intro",v)} multiline placeholder="Introductietekst…"/></div>
+              <EF label="Naam gast" value={item.extra.wie} onChange={v=>upd("wie",v)} placeholder="Naam gast"/>
+              <EF label="Functie" value={item.extra.functie} onChange={v=>upd("functie",v)} placeholder="Functie / rol"/>
             </div>
+            {onNaarGasten&&(
+              <button onClick={onNaarGasten} style={{marginTop:4,padding:"6px 12px",fontSize:11,fontWeight:600,
+                background:`${BRAND.paars}10`,border:`1px solid ${BRAND.paars}44`,color:BRAND.paars,
+                borderRadius:6,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                📋 Naar gastvoorbereiding →
+              </button>
+            )}
             <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
           {item.type==="special"&&item.what.includes("LP")&&<>
@@ -994,6 +998,7 @@ export default function App() {
   const [useSim, setUseSim] = useState(true);
   const [zoekOpen, setZoekOpen] = useState(false);
   const [zoekId, setZoekId] = useState(null);
+  const [focusGastItemId, setFocusGastItemId] = useState(null);
 
   const [syncStatus, setSyncStatus] = useState(API_KLAAR ? "laden" : "lokaal");
   const [highlightId, setHighlightId] = useState(null);
@@ -1391,13 +1396,14 @@ export default function App() {
                   onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
                   onDelete={role==="Eindredactie"?handleDelete:null}
                   isActive={getActiveId(tabUur)===item.id}
-                  isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
+                  isPast={timeToSec(item.timeBerekend||item.time)<curSec}
+                  onNaarGasten={item.type==="interview"?()=>{setFocusGastItemId(String(item.id));setTab("gasten");}:null}/>
               </div>
             ))}
             {role==="Eindredactie" && <ToevoegenKnop uur={tabUur} onAdd={handleAddItem}/>}
           </>}
 
-          {actieveUitzending && tab==="gasten" && <GastenTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus} rundown={rundown}/>}
+          {actieveUitzending && tab==="gasten" && <GastenTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus} rundown={rundown} focusItemId={focusGastItemId} onFocusClear={()=>setFocusGastItemId(null)}/>}
           {actieveUitzending && tab==="redactie" && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
         </div>
         {/* Timeline panel — alleen bij uur-tabs */}
@@ -1433,7 +1439,7 @@ export default function App() {
 // ════════════════════════════════════════════════════════════
 //  GastenTab
 // ════════════════════════════════════════════════════════════
-function GastenTab({ uitzendingId, setSyncStatus, rundown }) {
+function GastenTab({ uitzendingId, setSyncStatus, rundown, focusItemId, onFocusClear }) {
   const nieuwGast = ()=>({id:Date.now(),wie:"",type:"Telefonisch",tel:"",onderwerp:"",
     intro:"",vragen:"",achtergrond:"",bronnen:"",interviewItemId:""});
   const [gasten, setGasten] = useState([
@@ -1450,6 +1456,14 @@ function GastenTab({ uitzendingId, setSyncStatus, rundown }) {
     if(!API_KLAAR) return;
     sheetGet("getGasten",uitzendingId).then(r=>{ if(r?.ok&&r.data?.length) setGasten(r.data); });
   },[uitzendingId]);
+
+  // Auto-open gekoppelde gast vanuit draaiboek
+  useEffect(()=>{
+    if (!focusItemId) return;
+    const gekoppeld = gasten.find(g=>String(g.interviewItemId)===String(focusItemId));
+    if (gekoppeld) setOpen(p=>({...p,[gekoppeld.id]:true}));
+    if (onFocusClear) onFocusClear();
+  },[focusItemId]);
 
   const db=useDebounce(gasten,1000);
   const first=useRef(true);
