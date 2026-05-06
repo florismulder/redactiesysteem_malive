@@ -1069,10 +1069,18 @@ export default function App() {
     if (!API_KLAAR || !actieveUitzending) return;
     if (firstLoad.current) { firstLoad.current=false; return; }
     setSyncStatus("opslaan");
-    // Sla volgorde op als kleine array van ID's
     const orderPromise = sheetPost({ action:"saveRundownOrder", uitzendingId:actieveUitzending.id, data:debouncedRundown.map(i=>i.id) });
-    // Sla content per item op
-    const itemPromises = debouncedRundown.map(item=>
+    const teSlaan = debouncedRundown.filter(item=>{
+      if (item.duurWerkelijkSec !== item.duurGeplandSec) return true;
+      const e = item.extra || {};
+      if (item.type==="muziek")            return !!(e.artiest||e.nummer);
+      if (e.berichten!==undefined)         return !!(e.berichten||e.intro);
+      if (e.wie!==undefined)               return !!(e.wie||e.tel||e.functie||e.intro);
+      if (e.tekst!==undefined)             return !!e.tekst;
+      if (e.lp_naam!==undefined)           return !!(e.lp_naam||e.artiest||e.tekst);
+      return false;
+    });
+    const itemPromises = teSlaan.map(item=>
       sheetPost({ action:"saveRundownItem", uitzendingId:actieveUitzending.id, data:{
         itemId:item.id, extra:item.extra, duurWerkelijkSec:item.duurWerkelijkSec,
       }})
