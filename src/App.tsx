@@ -739,7 +739,7 @@ const whoVis = {
 function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, isActive, isPast, onNaarGasten }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
-  const readOnly = role==="Host";
+  const readOnly = false;
   const canEdit = role==="Eindredactie" || role==="Host" || item.who.includes(role);
   const kanHernoemen = role==="Eindredactie" && item.type !== "muziek";
   const dimmed = isPast&&!isActive;
@@ -1284,7 +1284,6 @@ export default function App() {
   const allTabs = [
     ...uurTabs,
     { id:"redactie", l:"REDACTIE", s:"" },
-    { id:"redactie",l:"REDACTIE",s:"" },
   ];
 
   const currentItems = isUurTab ? rundown.filter(i => i.uur === tabUur) : [];
