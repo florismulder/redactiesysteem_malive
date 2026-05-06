@@ -221,13 +221,26 @@ async function sheetGet(action, uitzendingId) {
 async function sheetPost(body) {
   if (!API_KLAAR) return null;
   try {
-    const params = new URLSearchParams({
-      action: body.action,
-      uitzendingId: body.uitzendingId,
-      data: JSON.stringify(body.data),
-    });
-    const r = await fetch(`${API_URL}?${params.toString()}`);
-    return await r.json();
+    const dataStr = JSON.stringify(body.data);
+    if (dataStr.length > 600) {
+      // Grote payload: POST met no-cors (geen URL-limiet, response niet leesbaar)
+      await fetch(API_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(body),
+      });
+      return { ok: true };
+    } else {
+      // Kleine payload: GET (response leesbaar, verifieerbaar)
+      const params = new URLSearchParams({
+        action: body.action,
+        uitzendingId: body.uitzendingId,
+        data: dataStr,
+      });
+      const r = await fetch(`${API_URL}?${params.toString()}`);
+      return await r.json();
+    }
   } catch { return null; }
 }
 
@@ -1104,6 +1117,7 @@ export default function App() {
     saveLock.current = true;
     setSyncStatus("opslaan");
     pendingSave.current = true;
+
     const teSlaan = rd.filter(item=>{
       if (item.duurWerkelijkSec !== item.duurGeplandSec) return true;
       const e = item.extra || {};
@@ -1114,26 +1128,30 @@ export default function App() {
       if (e.lp_naam!==undefined)   return !!(e.lp_naam||e.artiest||e.tekst);
       return false;
     });
-    const requests = [
-      { action:"saveRundownItem", uitzendingId:actieveUitzending.id,
-        data:{ itemId:"_order_", extra:{ ids: rd.map(i=>i.id) }, duurWerkelijkSec:0, spotifyUri:null }},
-      ...teSlaan.map(item=>({ action:"saveRundownItem", uitzendingId:actieveUitzending.id,
-        data:{ itemId:item.id, extra:item.extra, duurWerkelijkSec:item.duurWerkelijkSec, spotifyUri:item.spotifyUri }}))
+
+    const batchItems = [
+      { itemId:"_order_", extra:{ ids: rd.map(i=>i.id) }, duurWerkelijkSec:0, spotifyUri:null },
+      ...teSlaan.map(i=>({ itemId:i.id, extra:i.extra, duurWerkelijkSec:i.duurWerkelijkSec, spotifyUri:i.spotifyUri }))
     ];
-    (async()=>{
-      const results = [];
-      for (const req of requests) results.push(await sheetPost(req));
-      const ok = results.every(r=>r?.ok);
+
+    const done = (ok) => {
       setSyncStatus(ok?"ok":"fout");
       pendingSave.current = false;
       saveLock.current = false;
-      // Verwerk wachtrij
-      if (saveQueue.current) {
-        const next = saveQueue.current;
-        saveQueue.current = null;
-        slaOp(next);
-      }
-    })();
+      if (saveQueue.current) { const next=saveQueue.current; saveQueue.current=null; slaOp(next); }
+    };
+
+    const batchUrl = `${API_URL}?${new URLSearchParams({action:"saveRundownBatch",uitzendingId:actieveUitzending.id,data:JSON.stringify(batchItems)}).toString()}`;
+    if (batchUrl.length <= 7500) {
+      sheetPost({ action:"saveRundownBatch", uitzendingId:actieveUitzending.id, data:batchItems })
+        .then(r=>done(r?.ok));
+    } else {
+      (async()=>{
+        const results=[];
+        for (const item of batchItems) results.push(await sheetPost({action:"saveRundownItem",uitzendingId:actieveUitzending.id,data:item}));
+        done(results.every(r=>r?.ok));
+      })();
+    }
   }
 
   useEffect(()=>{
