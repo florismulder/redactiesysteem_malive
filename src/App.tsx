@@ -1010,10 +1010,14 @@ export default function App() {
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
 
   useEffect(()=>{
-    if (!API_KLAAR) return;
+    if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
     sheetGet("getUitzendingen","").then(res=>{
-      if (res?.ok && res.data?.length) setUitzendingen(res.data);
-      setSyncStatus("lokaal");
+      if (res?.ok && res.data?.length) {
+        setUitzendingen(res.data);
+        setSyncStatus("ok");
+      } else {
+        setSyncStatus("fout");
+      }
     });
   },[]);
 
