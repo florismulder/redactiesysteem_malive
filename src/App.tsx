@@ -1068,10 +1068,11 @@ export default function App() {
     setSyncStatus("laden");
     if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
     sheetGet("getRundown", actieveUitzending.id).then(res=>{
-      if (res?.ok && res.data) {
+      if (res?.ok) {
         setRundown(prev=>{
+          const savedData = res.data || {};
           const withData = herbereken(prev.map(item=>{
-            const saved = res.data[item.id];
+            const saved = savedData[item.id] || savedData[String(item.id)];
             if (!saved) return item;
             const extra = saved.extra || saved;
             return { ...item,
@@ -1079,13 +1080,13 @@ export default function App() {
               duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec,
               spotifyUri:saved.spotifyUri||extra.spotifyUri||item.spotifyUri };
           }), startTijd);
-          const orderSaved = res.data["_order_"];
-          const ids = orderSaved?.extra?.ids;
+          // Volgorde herstellen — zit in res.order (niet in res.data)
+          const ids = res.order?.extra?.ids;
           if (!ids?.length) return withData;
-          const map = Object.fromEntries(withData.map(i=>[i.id,i]));
-          const inOrder = ids.map(id=>map[id]).filter(Boolean);
-          const seen = new Set(ids);
-          const rest = withData.filter(i=>!seen.has(i.id));
+          const map = Object.fromEntries(withData.map(i=>[String(i.id),i]));
+          const inOrder = ids.map(id=>map[String(id)]).filter(Boolean);
+          const seen = new Set(ids.map(String));
+          const rest = withData.filter(i=>!seen.has(String(i.id)));
           return herbereken([...inOrder,...rest], startTijd);
         });
         setSyncStatus("ok");
