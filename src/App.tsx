@@ -116,7 +116,7 @@ const BASE_OFFSETS = [
   { id:9,  offset:780,  dur:120, type:"tekst",     what:"Wat wil je delen?",         who:["Host"],                   extra:{tekst:"Wat heb je gespeeld, geluisterd of gezien?"},                  uur:1 },
   { id:10, offset:900,  dur:180, type:"muziek",    what:"Muziek",                   who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""},            uur:1 },
   { id:11, offset:1080, dur:180, type:"muziek",    what:"Muziek",                   who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""},            uur:1 },
-  { id:12, offset:1260, dur:300, type:"interview", what:"Interview nav nieuws",       who:["Host"],                   extra:{wie:"",tel:"",functie:"",intro:""},         uur:1 },
+  { id:12, offset:1260, dur:300, type:"interview", what:"Interview nav nieuws",       who:["Host"],                   extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""},         uur:1 },
   { id:13, offset:1560, dur:210, type:"muziek",    what:"Verzoeknummer gast",        who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:""},                      uur:1 },
   { id:14, offset:1800, dur:30,  type:"tekst",     what:"Aankondiging Amsterdams nieuws", who:["Host"],              extra:{tekst:"Kondig af en bedank de gast…"},      uur:1 },
   { id:15, offset:1800, dur:5,   type:"jingle",    what:"Amsterdams Nieuwsjingle",   who:["Techniek"],               extra:{label:"Amsterdams Nieuwsjingle"},            uur:1 },
@@ -142,7 +142,7 @@ const BASE_OFFSETS = [
   { id:35, offset:5580, dur:300, type:"nieuws",    what:"Amsterdams nieuws",         who:["Nieuwsredactie"],         extra:{intro:"Mijn naam is [naam]",berichten:""},  uur:2 },
   { id:36, offset:5880, dur:180, type:"muziek",    what:"Muziek",                   who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""},            uur:2 },
   { id:37, offset:6060, dur:180, type:"muziek",    what:"Muziek",                   who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""},            uur:2 },
-  { id:38, offset:6240, dur:300, type:"interview", what:"Interview nav nieuws",       who:["Host"],                   extra:{wie:"",tel:"",functie:"",intro:""},         uur:2 },
+  { id:38, offset:6240, dur:300, type:"interview", what:"Interview nav nieuws",       who:["Host"],                   extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""},         uur:2 },
   { id:39, offset:6540, dur:210, type:"muziek",    what:"Verzoeknummer gast",        who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:""},                      uur:2 },
   { id:40, offset:6750, dur:180, type:"muziek",    what:"Muziek (reserve)",          who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""},            uur:2 },
   { id:41, offset:6930, dur:60,  type:"tekst",     what:"Afsluiting",                who:["Host"],                   extra:{tekst:"Beste luisteraars, dit was alweer de uitzending voor vandaag. Tot volgende week!"}, uur:2 },
@@ -169,7 +169,7 @@ function buildUurBase(uur, startTijd = "12:00") {
     { id:ts+3, offset:185,  dur:60,  type:"tekst",     what:`Opening uur ${uur}`,who:["Host"],                      extra:{tekst:""} },
     { id:ts+4, offset:245,  dur:300, type:"nieuws",    what:"Nieuws",            who:["Nieuwsredactie"],            extra:{intro:"",berichten:""} },
     { id:ts+5, offset:545,  dur:180, type:"muziek",    what:"Muziek",            who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""} },
-    { id:ts+6, offset:725,  dur:300, type:"interview", what:"Interview",         who:["Host"],                      extra:{wie:"",tel:"",functie:"",intro:""} },
+    { id:ts+6, offset:725,  dur:300, type:"interview", what:"Interview",         who:["Host"],                      extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""} },
     { id:ts+7, offset:1025, dur:180, type:"muziek",    what:"Muziek",            who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""} },
     { id:ts+8, offset:1205, dur:180, type:"muziek",    what:"Muziek",            who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""} },
     { id:ts+9, offset:1385, dur:60,  type:"tekst",     what:"Afsluiting",        who:["Host"],                      extra:{tekst:""} },
@@ -655,10 +655,16 @@ function TekstPopup({ open, label, value, onChange, onClose }) {
 // ════════════════════════════════════════════════════════════
 //  EditableField
 // ════════════════════════════════════════════════════════════
-function EF({ label, value, onChange, multiline=false, placeholder="" }) {
+function EF({ label, value, onChange, multiline=false, placeholder="", disabled=false }) {
   const [popupOpen, setPopupOpen] = useState(false);
-  const s={width:"100%",background:"rgba(255,255,255,0.7)",border:"1px solid #9CA3AF",color:"#0A0C10",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
+  const s={width:"100%",background:disabled?"transparent":"rgba(255,255,255,0.7)",border:disabled?"none":`1px solid #9CA3AF`,color:"#0A0C10",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
     lineHeight:"1.5",borderRadius:4,boxSizing:"border-box",resize:"vertical"};
+  if (disabled) return (
+    <div style={{marginBottom:8}}>
+      {label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}
+      <div style={{...s,whiteSpace:"pre-wrap",color:value?"#0A0C10":"#9CA3AF",minHeight:multiline?40:undefined}}>{value||placeholder}</div>
+    </div>
+  );
   return (
     <div style={{marginBottom:8}}>
       {label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}
@@ -682,6 +688,44 @@ function EF({ label, value, onChange, multiline=false, placeholder="" }) {
 
 
 // ════════════════════════════════════════════════════════════
+//  InterviewBlok — volledig gastformulier in het draaiboek
+// ════════════════════════════════════════════════════════════
+function InterviewBlok({ item, upd, onDuurChange, readOnly }) {
+  const [uitklap, setUitklap] = useState(false);
+  const e = item.extra;
+  return (
+    <>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8}}>
+        <EF label="Naam gast" value={e.wie} onChange={v=>upd("wie",v)} placeholder="Volledige naam" disabled={readOnly}/>
+        <EF label="Studio / Telefonisch" value={e.type} onChange={v=>upd("type",v)} placeholder="Studio" disabled={readOnly}/>
+        <EF label="Telefoonnummer" value={e.tel} onChange={v=>upd("tel",v)} placeholder="06-…" disabled={readOnly}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <EF label="Functie" value={e.functie} onChange={v=>upd("functie",v)} placeholder="Functie / rol" disabled={readOnly}/>
+        <EF label="Onderwerp" value={e.onderwerp} onChange={v=>upd("onderwerp",v)} placeholder="Waar gaat het gesprek over?" disabled={readOnly}/>
+      </div>
+      <EF label="Introductietekst" value={e.intro} onChange={v=>upd("intro",v)} multiline placeholder="Schrijf hier de introductietekst…" disabled={readOnly}/>
+      <EF label="Interviewvragen" value={e.vragen} onChange={v=>upd("vragen",v)} multiline placeholder={"1. …\n2. …\n3. …"} disabled={readOnly}/>
+
+      <button onClick={()=>setUitklap(u=>!u)} style={{
+        display:"flex",alignItems:"center",gap:6,padding:"5px 0",
+        background:"transparent",border:"none",cursor:"pointer",
+        fontSize:11,color:T.textMuted,fontWeight:600,marginBottom:4}}>
+        <span style={{fontSize:10}}>{uitklap?"▲":"▼"}</span>
+        {uitklap?"Verberg extra info":"Achtergrond & bronnen"}
+      </button>
+
+      {uitklap&&<>
+        <EF label="Achtergrond informatie" value={e.achtergrond||""} onChange={v=>upd("achtergrond",v)} multiline placeholder="Relevante achtergrond over de gast of het onderwerp…" disabled={readOnly}/>
+        <EF label="Bronnen (links, artikelen, etc.)" value={e.bronnen||""} onChange={v=>upd("bronnen",v)} multiline placeholder={"https://…\nhttps://…"} disabled={readOnly}/>
+      </>}
+
+      <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
+    </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
 //  ItemCard
 // ════════════════════════════════════════════════════════════
 const whoVis = {
@@ -695,7 +739,8 @@ const whoVis = {
 function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, isActive, isPast, onNaarGasten }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
-  const canEdit = role!=="Host" && (role==="Eindredactie"||item.who.includes(role));
+  const readOnly = role==="Host";
+  const canEdit = role==="Eindredactie" || role==="Host" || item.who.includes(role);
   const kanHernoemen = role==="Eindredactie" && item.type !== "muziek";
   const dimmed = isPast&&!isActive;
   const upd = (k,v)=>onUpdate(item.id,{...item.extra,[k]:v});
@@ -755,9 +800,9 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRena
         {canEdit&&<>
           {item.type==="muziek"&&<>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiestnaam"/>
-              <EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Titel"/>
-              {"feitje" in item.extra&&<div style={{gridColumn:"span 2"}}><EF label="Feitje / nieuwtje" value={item.extra.feitje} onChange={v=>{upd("feitje",v); const sec=Math.max(5,Math.ceil(v.trim().split(/\s+/).filter(Boolean).length/130*60)); onDuurChange(item.id,sec);}} multiline placeholder="Showhost vertelt…"/></div>}
+              <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiestnaam" disabled={readOnly}/>
+              <EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Titel" disabled={readOnly}/>
+              {"feitje" in item.extra&&<div style={{gridColumn:"span 2"}}><EF label="Feitje / nieuwtje" value={item.extra.feitje} onChange={v=>{upd("feitje",v); const sec=Math.max(5,Math.ceil(v.trim().split(/\s+/).filter(Boolean).length/130*60)); onDuurChange(item.id,sec);}} multiline placeholder="Showhost vertelt…" disabled={readOnly}/></div>}
             </div>
             <DuurInvoer item={item} onChange={onDuurChange} onZoek={()=>onZoek(item.id)}/>
           </>}
@@ -767,52 +812,39 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRena
               const woorden = v.trim().split(/\s+/).filter(Boolean).length;
               const sec = Math.max(10, Math.ceil(woorden / 130 * 60));
               onDuurChange(item.id, sec);
-            }} multiline placeholder="Voer tekst in…"/>
+            }} multiline placeholder="Voer tekst in…" disabled={readOnly}/>
             <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
           {item.type==="jingle"&&<div style={{fontSize:12,color:"#2D3444",fontStyle:"italic",fontWeight:500,padding:"4px 0"}}>{item.extra.label}</div>}
           {item.type==="nieuws"&&<>
-            <EF label="Intro" value={item.extra.intro} onChange={v=>upd("intro",v)} placeholder="Spreektekst intro…"/>
-            <EF label="Berichten" value={item.extra.berichten} onChange={v=>upd("berichten",v)} multiline placeholder="Voer nieuwsberichten in…"/>
+            <EF label="Intro" value={item.extra.intro} onChange={v=>upd("intro",v)} placeholder="Spreektekst intro…" disabled={readOnly}/>
+            <EF label="Berichten" value={item.extra.berichten} onChange={v=>upd("berichten",v)} multiline placeholder="Voer nieuwsberichten in…" disabled={readOnly}/>
             <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
-          {item.type==="interview"&&<>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <EF label="Naam gast" value={item.extra.wie} onChange={v=>upd("wie",v)} placeholder="Naam gast"/>
-              <EF label="Functie" value={item.extra.functie} onChange={v=>upd("functie",v)} placeholder="Functie / rol"/>
-            </div>
-            {onNaarGasten&&(
-              <button onClick={onNaarGasten} style={{marginTop:4,padding:"6px 12px",fontSize:11,fontWeight:600,
-                background:`${BRAND.paars}10`,border:`1px solid ${BRAND.paars}44`,color:BRAND.paars,
-                borderRadius:6,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-                📋 Naar gastvoorbereiding →
-              </button>
-            )}
-            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
-          </>}
+          {item.type==="interview"&&<InterviewBlok item={item} upd={upd} onDuurChange={onDuurChange} readOnly={readOnly}/>}
           {item.type==="special"&&item.what.includes("LP")&&<>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <EF label="LP / Album" value={item.extra.lp_naam} onChange={v=>upd("lp_naam",v)} placeholder="Albumtitel"/>
-              <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiest"/>
+              <EF label="LP / Album" value={item.extra.lp_naam} onChange={v=>upd("lp_naam",v)} placeholder="Albumtitel" disabled={readOnly}/>
+              <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiest" disabled={readOnly}/>
             </div>
-            <EF label="Tekst over LP" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Uitgebreide beschrijving…"/>
+            <EF label="Tekst over LP" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Uitgebreide beschrijving…" disabled={readOnly}/>
             <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
           {item.type==="special"&&item.what.includes("Plaat")&&<>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiest"/>
-              <EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Plaattitel"/>
+              <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiest" disabled={readOnly}/>
+              <EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Plaattitel" disabled={readOnly}/>
             </div>
-            <EF label="Verhaal achter de plaat" value={item.extra.verhaal} onChange={v=>upd("verhaal",v)} multiline placeholder="Het verhaal…"/>
+            <EF label="Verhaal achter de plaat" value={item.extra.verhaal} onChange={v=>upd("verhaal",v)} multiline placeholder="Het verhaal…" disabled={readOnly}/>
             <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
           {item.type==="special"&&item.what==="Reportage"&&<>
-            <EF label="Omschrijving" value={item.extra.omschrijving} onChange={v=>upd("omschrijving",v)} multiline placeholder="Waar gaat de reportage over?"/>
-            <EF label="Link / bestand" value={item.extra.link} onChange={v=>upd("link",v)} placeholder="URL of bestandsnaam"/>
+            <EF label="Omschrijving" value={item.extra.omschrijving} onChange={v=>upd("omschrijving",v)} multiline placeholder="Waar gaat de reportage over?" disabled={readOnly}/>
+            <EF label="Link / bestand" value={item.extra.link} onChange={v=>upd("link",v)} placeholder="URL of bestandsnaam" disabled={readOnly}/>
             <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
           {item.type==="special"&&!["LP","Plaat","Reportage"].some(w=>item.what.includes(w))&&<>
-            <EF label="Tekst / notitie" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Notitie…"/>
+            <EF label="Tekst / notitie" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Notitie…" disabled={readOnly}/>
             <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
           </>}
         </>}
@@ -998,7 +1030,7 @@ export default function App() {
   const [useSim, setUseSim] = useState(true);
   const [zoekOpen, setZoekOpen] = useState(false);
   const [zoekId, setZoekId] = useState(null);
-  const [focusGastItemId, setFocusGastItemId] = useState(null);
+
 
   const [syncStatus, setSyncStatus] = useState(API_KLAAR ? "laden" : "lokaal");
   const [highlightId, setHighlightId] = useState(null);
@@ -1075,7 +1107,7 @@ export default function App() {
       const e = item.extra || {};
       if (item.type==="muziek")    return !!(e.artiest||e.nummer);
       if (e.berichten!==undefined) return !!(e.berichten||e.intro);
-      if (e.wie!==undefined)       return !!(e.wie||e.tel||e.functie||e.intro);
+      if (e.wie!==undefined)       return !!(e.wie||e.tel||e.functie||e.intro||e.vragen||e.onderwerp||e.achtergrond||e.bronnen);
       if (e.tekst!==undefined)     return !!e.tekst;
       if (e.lp_naam!==undefined)   return !!(e.lp_naam||e.artiest||e.tekst);
       return false;
@@ -1215,7 +1247,7 @@ export default function App() {
       muziek:    { dur:180, extra:{artiest:"",nummer:"",feitje:""}, who:["Techniek","Muziekredactie"] },
       tekst:     { dur:60,  extra:{tekst:""},                       who:["Host"] },
       nieuws:    { dur:300, extra:{intro:"",berichten:""},           who:["Nieuwsredactie"] },
-      interview: { dur:300, extra:{wie:"",tel:"",functie:"",intro:""},who:["Host"] },
+      interview: { dur:300, extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""},who:["Host"] },
       jingle:    { dur:5,   extra:{label:"Jingle"},                  who:["Techniek"] },
       special:   { dur:120, extra:{tekst:""},                        who:["Host"] },
     };
@@ -1251,7 +1283,7 @@ export default function App() {
   }));
   const allTabs = [
     ...uurTabs,
-    { id:"gasten",  l:"GASTEN",  s:"" },
+    { id:"redactie", l:"REDACTIE", s:"" },
     { id:"redactie",l:"REDACTIE",s:"" },
   ];
 
@@ -1396,14 +1428,12 @@ export default function App() {
                   onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
                   onDelete={role==="Eindredactie"?handleDelete:null}
                   isActive={getActiveId(tabUur)===item.id}
-                  isPast={timeToSec(item.timeBerekend||item.time)<curSec}
-                  onNaarGasten={item.type==="interview"?()=>{setFocusGastItemId(String(item.id));setTab("gasten");}:null}/>
+                  isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
               </div>
             ))}
             {role==="Eindredactie" && <ToevoegenKnop uur={tabUur} onAdd={handleAddItem}/>}
           </>}
 
-          {actieveUitzending && tab==="gasten" && <GastenTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus} rundown={rundown} focusItemId={focusGastItemId} onFocusClear={()=>setFocusGastItemId(null)}/>}
           {actieveUitzending && tab==="redactie" && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
         </div>
         {/* Timeline panel — alleen bij uur-tabs */}
@@ -1436,108 +1466,6 @@ export default function App() {
   );
 }
 
-// ════════════════════════════════════════════════════════════
-//  GastenTab
-// ════════════════════════════════════════════════════════════
-function GastenTab({ uitzendingId, setSyncStatus, rundown, focusItemId, onFocusClear }) {
-  const nieuwGast = ()=>({id:Date.now(),wie:"",type:"Telefonisch",tel:"",onderwerp:"",
-    intro:"",vragen:"",achtergrond:"",bronnen:"",interviewItemId:""});
-  const [gasten, setGasten] = useState([
-    {...nieuwGast(),id:1,type:"Studio"},
-    {...nieuwGast(),id:2},
-    {...nieuwGast(),id:3},
-  ]);
-  const [open, setOpen] = useState({});
-
-  // Interview-blokken uit het draaiboek
-  const interviewBlokken = (rundown||[]).filter(i=>i.extra?.wie!==undefined||i.type==="gast");
-
-  useEffect(()=>{
-    if(!API_KLAAR) return;
-    sheetGet("getGasten",uitzendingId).then(r=>{ if(r?.ok&&r.data?.length) setGasten(r.data); });
-  },[uitzendingId]);
-
-  // Auto-open gekoppelde gast vanuit draaiboek
-  useEffect(()=>{
-    if (!focusItemId) return;
-    const gekoppeld = gasten.find(g=>String(g.interviewItemId)===String(focusItemId));
-    if (gekoppeld) setOpen(p=>({...p,[gekoppeld.id]:true}));
-    if (onFocusClear) onFocusClear();
-  },[focusItemId]);
-
-  const db=useDebounce(gasten,1000);
-  const first=useRef(true);
-  useEffect(()=>{
-    if(!API_KLAAR) return;
-    if(first.current){first.current=false;return;}
-    setSyncStatus("opslaan");
-    sheetPost({action:"saveGasten",uitzendingId,data:db}).then(r=>setSyncStatus(r?.ok?"ok":"fout"));
-  },[db]);
-
-  const upd=(id,k,v)=>setGasten(p=>p.map(x=>x.id===id?{...x,[k]:v}:x));
-  const toggle=(id)=>setOpen(p=>({...p,[id]:!p[id]}));
-
-  return (
-    <div>
-      <div style={{fontSize:11,letterSpacing:2,color:T.textMuted,marginBottom:14,fontWeight:600,textTransform:"uppercase"}}>Gastenlijst</div>
-      {gasten.map((g,i)=>{
-        const gekoppeld = interviewBlokken.find(b=>String(b.id)===String(g.interviewItemId));
-        return (
-          <div key={g.id} style={{background:T.bgCard,border:`1px solid ${gekoppeld?BRAND.roze+"44":T.border}`,borderRadius:8,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-            <div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",borderBottom:open[g.id]?`1px solid ${T.border}`:"none"}}
-              onClick={()=>toggle(g.id)}>
-              <div style={{width:30,height:30,borderRadius:"50%",flexShrink:0,background:BRAND.gradient,
-                display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>{i+1}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,color:g.wie?T.text:T.textLight}}>{g.wie||"Gast "+(i+1)+" — nog niet ingevuld"}</div>
-                <div style={{fontSize:11,color:T.textMuted,marginTop:2,display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <span>{g.type||"Type onbekend"}</span>
-                  {g.tel&&<span>📞 {g.tel}</span>}
-                  {g.onderwerp&&<span>· {g.onderwerp}</span>}
-                  {gekoppeld&&<span style={{color:BRAND.roze,fontWeight:600}}>🔗 {gekoppeld.what||"Interview"}</span>}
-                </div>
-              </div>
-              <div style={{fontSize:11,color:T.textLight}}>{open[g.id]?"▲":"▼"}</div>
-            </div>
-            {open[g.id]&&(
-              <div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
-                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8}}>
-                  <EF label="Naam gast" value={g.wie} onChange={v=>upd(g.id,"wie",v)} placeholder="Volledige naam"/>
-                  <EF label="Studio / Telefonisch" value={g.type} onChange={v=>upd(g.id,"type",v)} placeholder="Studio"/>
-                  <EF label="Telefoonnummer" value={g.tel} onChange={v=>upd(g.id,"tel",v)} placeholder="06-…"/>
-                </div>
-                <EF label="Onderwerp / functie" value={g.onderwerp} onChange={v=>upd(g.id,"onderwerp",v)} placeholder="Waar gaat het gesprek over?"/>
-
-                {/* Koppeling aan interviewblok */}
-                <div>
-                  <div style={{fontSize:10,letterSpacing:1,color:T.textLight,marginBottom:4,fontWeight:600,textTransform:"uppercase"}}>Koppel aan interviewblok</div>
-                  <select value={g.interviewItemId||""} onChange={e=>upd(g.id,"interviewItemId",e.target.value)}
-                    style={{width:"100%",padding:"7px 10px",fontSize:12,borderRadius:6,border:`1px solid ${T.inputBorder}`,
-                      background:T.inputBg,color:g.interviewItemId?T.text:T.textMuted}}>
-                    <option value="">— Geen koppeling —</option>
-                    {interviewBlokken.map(b=>(
-                      <option key={b.id} value={String(b.id)}>{b.what||"Interview"} {b.startTijd?`(${b.startTijd})`:""}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <EF label="Introductietekst (voor de presentator)" value={g.intro} onChange={v=>upd(g.id,"intro",v)} multiline placeholder="Schrijf hier de introductietekst…"/>
-                <EF label="Interviewvragen" value={g.vragen} onChange={v=>upd(g.id,"vragen",v)} multiline placeholder="1. …&#10;2. …&#10;3. …"/>
-                <EF label="Achtergrond informatie" value={g.achtergrond||""} onChange={v=>upd(g.id,"achtergrond",v)} multiline placeholder="Relevante achtergrond over de gast of het onderwerp…"/>
-                <EF label="Bronnen (links, artikelen, etc.)" value={g.bronnen||""} onChange={v=>upd(g.id,"bronnen",v)} multiline placeholder="https://…&#10;https://…"/>
-              </div>
-            )}
-          </div>
-        );
-      })}
-      <button onClick={()=>setGasten(p=>[...p,nieuwGast()])}
-        style={{padding:"8px 16px",background:"transparent",border:`1px dashed ${T.borderDark}`,
-          color:T.textMuted,cursor:"pointer",fontSize:11,borderRadius:6,width:"100%",marginTop:4}}>
-        + Gast toevoegen
-      </button>
-    </div>
-  );
-}
 
 // ════════════════════════════════════════════════════════════
 //  RedactieTab
