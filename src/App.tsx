@@ -324,7 +324,7 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
         <div style={{overflowY:"auto",flex:1}}>
           {uitzendingen.length === 0 && !aanmaken && (
             <div style={{padding:"32px 24px",color:T.textMuted,textAlign:"center",fontSize:13}}>
-              Nog geen uitzendingen. Maak er een aan om te beginnen.
+              {API_KLAAR ? "⏳ Uitzendingen worden geladen…" : "Nog geen uitzendingen. Maak er een aan om te beginnen."}
             </div>
           )}
           {uitzendingen.map(u => (
@@ -1092,12 +1092,16 @@ export default function App() {
     });
   },[actieveUitzending]);
 
-  const debouncedRundown = useDebounce(rundown, 1200);
+  const debouncedRundown = useDebounce(rundown, 1500);
   const firstLoad = useRef(true);
   const pendingSave = useRef(false);
+  const saveLock = useRef(false);
+  const saveQueue = useRef(null);
 
   function slaOp(rd) {
     if (!API_KLAAR || !actieveUitzending) return;
+    if (saveLock.current) { saveQueue.current = rd; return; }
+    saveLock.current = true;
     setSyncStatus("opslaan");
     pendingSave.current = true;
     const teSlaan = rd.filter(item=>{
@@ -1116,16 +1120,19 @@ export default function App() {
       ...teSlaan.map(item=>({ action:"saveRundownItem", uitzendingId:actieveUitzending.id,
         data:{ itemId:item.id, extra:item.extra, duurWerkelijkSec:item.duurWerkelijkSec, spotifyUri:item.spotifyUri }}))
     ];
-    // Sequentieel i.p.v. parallel — voorkomt GAS concurrency-fouten
     (async()=>{
       const results = [];
-      for (const req of requests) {
-        results.push(await sheetPost(req));
-      }
+      for (const req of requests) results.push(await sheetPost(req));
       const ok = results.every(r=>r?.ok);
       setSyncStatus(ok?"ok":"fout");
       pendingSave.current = false;
-      return ok;
+      saveLock.current = false;
+      // Verwerk wachtrij
+      if (saveQueue.current) {
+        const next = saveQueue.current;
+        saveQueue.current = null;
+        slaOp(next);
+      }
     })();
   }
 
@@ -1378,7 +1385,17 @@ export default function App() {
           color:useSim?BRAND.roze:"#1F2937"}}>{useSim?"SIM AAN":"SIM UIT"}</button>
       </div>
 
-      <div style={{display:"flex",height:"calc(100vh - 100px)",overflow:"hidden"}}>
+      <div style={{display:"flex",height:"calc(100vh - 100px)",overflow:"hidden",position:"relative"}}>
+        {/* Laad-overlay */}
+        {syncStatus==="laden" && actieveUitzending && (
+          <div style={{position:"absolute",inset:0,background:"rgba(255,255,255,0.75)",zIndex:50,
+            display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}>
+            <div style={{background:"#fff",padding:"20px 32px",borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,0.12)",
+              textAlign:"center",fontSize:13,color:T.textMuted,fontWeight:600}}>
+              ⏳ Draaiboek wordt geladen…
+            </div>
+          </div>
+        )}
         {/* Sidebar */}
         <div style={{width:180,background:T.bgSidebar,borderRight:`1px solid ${T.border}`,flexShrink:0,overflowY:"auto"}}>
           <div style={{paddingTop:8}}>
