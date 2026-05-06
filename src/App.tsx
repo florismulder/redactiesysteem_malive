@@ -97,9 +97,10 @@ function formatDatum(dateStr) {
 function formatUitzendingNaam(u) {
   if (!u) return "";
   const naam = u.naam || "";
-  if (!naam || naam === "undefined" || naam.includes("GMT") || naam.includes("00:00:00") || naam.match(/^\w{3} \w{3}/)) {
-    return formatDatum(u.datum);
-  }
+  const isRommel = !naam || naam === "undefined" || naam.includes("GMT") ||
+    naam.includes("T22:") || naam.includes("T00:") || naam.includes("00:00:00") ||
+    /^\d{4}-\d{2}-\d{2}T/.test(naam) || naam.match(/^\w{3} \w{3}/);
+  if (isRommel) return formatDatum(u.datum);
   return naam;
 }
 
@@ -221,26 +222,13 @@ async function sheetGet(action, uitzendingId) {
 async function sheetPost(body) {
   if (!API_KLAAR) return null;
   try {
-    const dataStr = JSON.stringify(body.data);
-    if (dataStr.length > 600) {
-      // Grote payload: POST met no-cors (geen URL-limiet, response niet leesbaar)
-      await fetch(API_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify(body),
-      });
-      return { ok: true };
-    } else {
-      // Kleine payload: GET (response leesbaar, verifieerbaar)
-      const params = new URLSearchParams({
-        action: body.action,
-        uitzendingId: body.uitzendingId,
-        data: dataStr,
-      });
-      const r = await fetch(`${API_URL}?${params.toString()}`);
-      return await r.json();
-    }
+    const params = new URLSearchParams({
+      action: body.action,
+      uitzendingId: body.uitzendingId,
+      data: JSON.stringify(body.data),
+    });
+    const r = await fetch(`${API_URL}?${params.toString()}`);
+    return await r.json();
   } catch { return null; }
 }
 
@@ -1129,29 +1117,32 @@ export default function App() {
       return false;
     });
 
-    const batchItems = [
-      { itemId:"_order_", extra:{ ids: rd.map(i=>i.id) }, duurWerkelijkSec:0, spotifyUri:null },
-      ...teSlaan.map(i=>({ itemId:i.id, extra:i.extra, duurWerkelijkSec:i.duurWerkelijkSec, spotifyUri:i.spotifyUri }))
+    // Begrens tekstvelden zodat de URL niet te lang wordt
+    function kapExtra(extra) {
+      if (!extra) return extra;
+      const MAX = 800;
+      const r = {};
+      for (const [k,v] of Object.entries(extra))
+        r[k] = typeof v === "string" && v.length > MAX ? v.slice(0, MAX) : v;
+      return r;
+    }
+
+    const requests = [
+      { action:"saveRundownItem", uitzendingId:actieveUitzending.id,
+        data:{ itemId:"_order_", extra:{ ids: rd.map(i=>i.id) }, duurWerkelijkSec:0, spotifyUri:null }},
+      ...teSlaan.map(item=>({ action:"saveRundownItem", uitzendingId:actieveUitzending.id,
+        data:{ itemId:item.id, extra:kapExtra(item.extra), duurWerkelijkSec:item.duurWerkelijkSec, spotifyUri:item.spotifyUri }}))
     ];
 
-    const done = (ok) => {
+    (async()=>{
+      const results = [];
+      for (const req of requests) results.push(await sheetPost(req));
+      const ok = results.every(r=>r?.ok);
       setSyncStatus(ok?"ok":"fout");
       pendingSave.current = false;
       saveLock.current = false;
       if (saveQueue.current) { const next=saveQueue.current; saveQueue.current=null; slaOp(next); }
-    };
-
-    const batchUrl = `${API_URL}?${new URLSearchParams({action:"saveRundownBatch",uitzendingId:actieveUitzending.id,data:JSON.stringify(batchItems)}).toString()}`;
-    if (batchUrl.length <= 7500) {
-      sheetPost({ action:"saveRundownBatch", uitzendingId:actieveUitzending.id, data:batchItems })
-        .then(r=>done(r?.ok));
-    } else {
-      (async()=>{
-        const results=[];
-        for (const item of batchItems) results.push(await sheetPost({action:"saveRundownItem",uitzendingId:actieveUitzending.id,data:item}));
-        done(results.every(r=>r?.ok));
-      })();
-    }
+    })();
   }
 
   useEffect(()=>{
