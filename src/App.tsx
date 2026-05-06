@@ -457,40 +457,25 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
 // ════════════════════════════════════════════════════════════
 //  ZoekModal
 // ════════════════════════════════════════════════════════════
-function ZoekModal({ open, onClose, onSelect, spotifyToken }) {
+function ZoekModal({ open, onClose, onSelect }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [bron, setBron] = useState(spotifyToken ? "spotify" : "itunes");
 
   useEffect(()=>{ if(open){setQ("");setResults([]);} },[open]);
-  useEffect(()=>{ if(spotifyToken) setBron("spotify"); },[spotifyToken]);
 
   async function zoek() {
     if (!q.trim()) return;
     setLoading(true); setResults([]);
     try {
-      if (bron==="spotify" && spotifyToken) {
-        const r = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=8`,
-          { headers:{ Authorization:`Bearer ${spotifyToken}` } });
-        const d = await r.json();
-        setResults((d.tracks?.items||[]).map(t=>({
-          id:t.id, artiest:t.artists.map(a=>a.name).join(", "),
-          nummer:t.name, album:t.album.name,
-          duurSec:Math.round(t.duration_ms/1000),
-          cover:t.album.images?.[2]?.url, uri:t.uri,
-        })));
-      } else {
-        // iTunes Search API — gratis, geen account nodig
-        const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=10&lang=nl_nl`);
-        const d = await r.json();
-        setResults((d.results||[]).map(t=>({
-          id:t.trackId, artiest:t.artistName,
-          nummer:t.trackName, album:t.collectionName,
-          duurSec:Math.round((t.trackTimeMillis||0)/1000),
-          cover:t.artworkUrl60, uri:null,
-        })));
-      }
+      const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=10&lang=nl_nl`);
+      const d = await r.json();
+      setResults((d.results||[]).map(t=>({
+        id:t.trackId, artiest:t.artistName,
+        nummer:t.trackName, album:t.collectionName,
+        duurSec:Math.round((t.trackTimeMillis||0)/1000),
+        cover:t.artworkUrl60,
+      })));
     } catch { setResults([{fout:true}]); }
     setLoading(false);
   }
@@ -501,19 +486,8 @@ function ZoekModal({ open, onClose, onSelect, spotifyToken }) {
       onClick={onClose}>
       <div style={{background:"#fff",borderRadius:10,width:500,maxHeight:"75vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}
         onClick={e=>e.stopPropagation()}>
-        <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:14,fontWeight:700,color:T.text}}>Zoek nummer</span>
-          <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
-            {["itunes","spotify"].map(b=>(
-              <button key={b} onClick={()=>setBron(b)} style={{
-                padding:"4px 12px",fontSize:11,borderRadius:20,cursor:"pointer",
-                background:bron===b?"#F3F4F6":"transparent",
-                border:`1px solid ${bron===b?T.borderDark:T.border}`,
-                color:bron===b?T.text:T.textMuted,
-                opacity:b==="spotify"&&!spotifyToken?0.4:1,
-              }}>{b==="spotify"?"🎧 Spotify":"🎵 iTunes"}</button>
-            ))}
-          </div>
+        <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center"}}>
+          <span style={{fontSize:14,fontWeight:700,color:T.text}}>🎵 Zoek nummer via iTunes</span>
         </div>
         <div style={{padding:"12px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:8}}>
           <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&zoek()}
@@ -1020,7 +994,7 @@ export default function App() {
   const [useSim, setUseSim] = useState(true);
   const [zoekOpen, setZoekOpen] = useState(false);
   const [zoekId, setZoekId] = useState(null);
-  const [spotifyToken, setSpotifyToken] = useState("");
+
   const [syncStatus, setSyncStatus] = useState(API_KLAAR ? "laden" : "lokaal");
   const [highlightId, setHighlightId] = useState(null);
   const itemRefs = useRef({});
@@ -1332,12 +1306,6 @@ export default function App() {
         <button onClick={()=>setUseSim(s=>!s)} style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,
           background:useSim?`${BRAND.roze}15`:T.bg,border:`1px solid ${useSim?BRAND.roze:T.border}`,
           color:useSim?BRAND.roze:"#1F2937"}}>{useSim?"SIM AAN":"SIM UIT"}</button>
-        <button onClick={()=>setSpotifyToken(t=>t?"":prompt("Plak je Spotify access token:")||"")}
-          style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,
-            background:spotifyToken?"#DCFCE7":T.bg,border:`1px solid ${spotifyToken?"#86EFAC":T.border}`,
-            color:spotifyToken?"#15803D":T.textMuted}}>
-          {spotifyToken?"🎧 Spotify ✓":"🎧 Spotify"}
-        </button>
       </div>
 
       <div style={{display:"flex",height:"calc(100vh - 100px)",overflow:"hidden"}}>
@@ -1429,7 +1397,7 @@ export default function App() {
             {role==="Eindredactie" && <ToevoegenKnop uur={tabUur} onAdd={handleAddItem}/>}
           </>}
 
-          {actieveUitzending && tab==="gasten" && <GastenTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
+          {actieveUitzending && tab==="gasten" && <GastenTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus} rundown={rundown}/>}
           {actieveUitzending && tab==="redactie" && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
         </div>
         {/* Timeline panel — alleen bij uur-tabs */}
@@ -1457,7 +1425,7 @@ export default function App() {
         onCopy={handleCopyUitzending}
       />
       <ZoekModal open={zoekOpen} onClose={()=>setZoekOpen(false)}
-        onSelect={handleTrackSelect} spotifyToken={spotifyToken}/>
+        onSelect={handleTrackSelect}/>
     </div>
   );
 }
@@ -1465,13 +1433,18 @@ export default function App() {
 // ════════════════════════════════════════════════════════════
 //  GastenTab
 // ════════════════════════════════════════════════════════════
-function GastenTab({ uitzendingId, setSyncStatus }) {
+function GastenTab({ uitzendingId, setSyncStatus, rundown }) {
+  const nieuwGast = ()=>({id:Date.now(),wie:"",type:"Telefonisch",tel:"",onderwerp:"",
+    intro:"",vragen:"",achtergrond:"",bronnen:"",interviewItemId:""});
   const [gasten, setGasten] = useState([
-    {id:1,wie:"",type:"Studio",tel:"",onderwerp:"",intro:"",vragen:""},
-    {id:2,wie:"",type:"Telefonisch",tel:"",onderwerp:"",intro:"",vragen:""},
-    {id:3,wie:"",type:"Telefonisch",tel:"",onderwerp:"",intro:"",vragen:""},
+    {...nieuwGast(),id:1,type:"Studio"},
+    {...nieuwGast(),id:2},
+    {...nieuwGast(),id:3},
   ]);
   const [open, setOpen] = useState({});
+
+  // Interview-blokken uit het draaiboek
+  const interviewBlokken = (rundown||[]).filter(i=>i.extra?.wie!==undefined||i.type==="gast");
 
   useEffect(()=>{
     if(!API_KLAAR) return;
@@ -1493,37 +1466,57 @@ function GastenTab({ uitzendingId, setSyncStatus }) {
   return (
     <div>
       <div style={{fontSize:11,letterSpacing:2,color:T.textMuted,marginBottom:14,fontWeight:600,textTransform:"uppercase"}}>Gastenlijst</div>
-      {gasten.map((g,i)=>(
-        <div key={g.id} style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-          <div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",borderBottom:open[g.id]?`1px solid ${T.border}`:"none"}}
-            onClick={()=>toggle(g.id)}>
-            <div style={{width:30,height:30,borderRadius:"50%",flexShrink:0,background:BRAND.gradient,
-              display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>{i+1}</div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:g.wie?T.text:T.textLight}}>{g.wie||"Gast "+(i+1)+" — nog niet ingevuld"}</div>
-              <div style={{fontSize:11,color:T.textMuted,marginTop:2,display:"flex",gap:8}}>
-                <span>{g.type||"Type onbekend"}</span>
-                {g.tel&&<span>📞 {g.tel}</span>}
-                {g.onderwerp&&<span>· {g.onderwerp}</span>}
+      {gasten.map((g,i)=>{
+        const gekoppeld = interviewBlokken.find(b=>String(b.id)===String(g.interviewItemId));
+        return (
+          <div key={g.id} style={{background:T.bgCard,border:`1px solid ${gekoppeld?BRAND.roze+"44":T.border}`,borderRadius:8,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+            <div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",borderBottom:open[g.id]?`1px solid ${T.border}`:"none"}}
+              onClick={()=>toggle(g.id)}>
+              <div style={{width:30,height:30,borderRadius:"50%",flexShrink:0,background:BRAND.gradient,
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>{i+1}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:g.wie?T.text:T.textLight}}>{g.wie||"Gast "+(i+1)+" — nog niet ingevuld"}</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:2,display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <span>{g.type||"Type onbekend"}</span>
+                  {g.tel&&<span>📞 {g.tel}</span>}
+                  {g.onderwerp&&<span>· {g.onderwerp}</span>}
+                  {gekoppeld&&<span style={{color:BRAND.roze,fontWeight:600}}>🔗 {gekoppeld.what||"Interview"}</span>}
+                </div>
               </div>
+              <div style={{fontSize:11,color:T.textLight}}>{open[g.id]?"▲":"▼"}</div>
             </div>
-            <div style={{fontSize:11,color:T.textLight}}>{open[g.id]?"▲":"▼"}</div>
+            {open[g.id]&&(
+              <div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8}}>
+                  <EF label="Naam gast" value={g.wie} onChange={v=>upd(g.id,"wie",v)} placeholder="Volledige naam"/>
+                  <EF label="Studio / Telefonisch" value={g.type} onChange={v=>upd(g.id,"type",v)} placeholder="Studio"/>
+                  <EF label="Telefoonnummer" value={g.tel} onChange={v=>upd(g.id,"tel",v)} placeholder="06-…"/>
+                </div>
+                <EF label="Onderwerp / functie" value={g.onderwerp} onChange={v=>upd(g.id,"onderwerp",v)} placeholder="Waar gaat het gesprek over?"/>
+
+                {/* Koppeling aan interviewblok */}
+                <div>
+                  <div style={{fontSize:10,letterSpacing:1,color:T.textLight,marginBottom:4,fontWeight:600,textTransform:"uppercase"}}>Koppel aan interviewblok</div>
+                  <select value={g.interviewItemId||""} onChange={e=>upd(g.id,"interviewItemId",e.target.value)}
+                    style={{width:"100%",padding:"7px 10px",fontSize:12,borderRadius:6,border:`1px solid ${T.inputBorder}`,
+                      background:T.inputBg,color:g.interviewItemId?T.text:T.textMuted}}>
+                    <option value="">— Geen koppeling —</option>
+                    {interviewBlokken.map(b=>(
+                      <option key={b.id} value={String(b.id)}>{b.what||"Interview"} {b.startTijd?`(${b.startTijd})`:""}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <EF label="Introductietekst (voor de presentator)" value={g.intro} onChange={v=>upd(g.id,"intro",v)} multiline placeholder="Schrijf hier de introductietekst…"/>
+                <EF label="Interviewvragen" value={g.vragen} onChange={v=>upd(g.id,"vragen",v)} multiline placeholder="1. …&#10;2. …&#10;3. …"/>
+                <EF label="Achtergrond informatie" value={g.achtergrond||""} onChange={v=>upd(g.id,"achtergrond",v)} multiline placeholder="Relevante achtergrond over de gast of het onderwerp…"/>
+                <EF label="Bronnen (links, artikelen, etc.)" value={g.bronnen||""} onChange={v=>upd(g.id,"bronnen",v)} multiline placeholder="https://…&#10;https://…"/>
+              </div>
+            )}
           </div>
-          {open[g.id]&&(
-            <div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:8}}>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8}}>
-                <EF label="Naam gast" value={g.wie} onChange={v=>upd(g.id,"wie",v)} placeholder="Volledige naam"/>
-                <EF label="Studio / Telefonisch" value={g.type} onChange={v=>upd(g.id,"type",v)} placeholder="Studio"/>
-                <EF label="Telefoonnummer" value={g.tel} onChange={v=>upd(g.id,"tel",v)} placeholder="06-…"/>
-              </div>
-              <EF label="Onderwerp / functie" value={g.onderwerp} onChange={v=>upd(g.id,"onderwerp",v)} placeholder="Waar gaat het gesprek over?"/>
-              <EF label="Introductietekst (voor de presentator)" value={g.intro} onChange={v=>upd(g.id,"intro",v)} multiline placeholder="Schrijf hier de introductietekst…"/>
-              <EF label="Interviewvragen" value={g.vragen} onChange={v=>upd(g.id,"vragen",v)} multiline placeholder="1. …&#10;2. …&#10;3. …"/>
-            </div>
-          )}
-        </div>
-      ))}
-      <button onClick={()=>setGasten(p=>[...p,{id:Date.now(),wie:"",type:"Telefonisch",tel:"",onderwerp:"",intro:"",vragen:""}])}
+        );
+      })}
+      <button onClick={()=>setGasten(p=>[...p,nieuwGast()])}
         style={{padding:"8px 16px",background:"transparent",border:`1px dashed ${T.borderDark}`,
           color:T.textMuted,cursor:"pointer",fontSize:11,borderRadius:6,width:"100%",marginTop:4}}>
         + Gast toevoegen
@@ -1537,17 +1530,22 @@ function GastenTab({ uitzendingId, setSyncStatus }) {
 // ════════════════════════════════════════════════════════════
 function RedactieTab({ uitzendingId, setSyncStatus }) {
   const [redactie, setRedactie] = useState([
-    {functie:"Eindredactie",taak:"Host 1 / Host 2 / Techniek",produceert:"De plaat en zijn verhaal",naam:""},
-    {functie:"Nieuwsredactie",taak:"Nieuwslezer",produceert:"Nieuws, Amsterdams nieuws",naam:""},
-    {functie:"Interviewredactie",taak:"Interviewer",produceert:"Foto geïnterviewde",naam:""},
-    {functie:"Muziekredactie",taak:"New Music / LP van de dag",produceert:"New Music overzicht",naam:""},
-    {functie:"Reportageredactie",taak:"",produceert:"Reportage inclusief foto's",naam:""},
-    {functie:"Webredactie",taak:"Regisseur / Cameraregie",produceert:"MaLive redactie",naam:""},
+    {functie:"Eindredactie",taak:"Host 1 / Host 2 / Techniek",produceert:"De plaat en zijn verhaal",namen:[""]},
+    {functie:"Nieuwsredactie",taak:"Nieuwslezer",produceert:"Nieuws, Amsterdams nieuws",namen:[""]},
+    {functie:"Interviewredactie",taak:"Interviewer",produceert:"Foto geïnterviewde",namen:[""]},
+    {functie:"Muziekredactie",taak:"New Music / LP van de dag",produceert:"New Music overzicht",namen:[""]},
+    {functie:"Reportageredactie",taak:"",produceert:"Reportage inclusief foto's",namen:[""]},
+    {functie:"Webredactie",taak:"Regisseur / Cameraregie",produceert:"MaLive redactie",namen:[""]},
   ]);
 
   useEffect(()=>{
     if(!API_KLAAR) return;
-    sheetGet("getRedactie",uitzendingId).then(r=>{ if(r?.ok&&r.data?.length) setRedactie(r.data); });
+    sheetGet("getRedactie",uitzendingId).then(r=>{
+      if(r?.ok&&r.data?.length) {
+        // Backward compat: naam (string) → namen (array)
+        setRedactie(r.data.map(x=>({...x, namen: x.namen||(x.naam?[x.naam]:[""])})));
+      }
+    });
   },[uitzendingId]);
 
   const db=useDebounce(redactie,1000);
@@ -1559,17 +1557,35 @@ function RedactieTab({ uitzendingId, setSyncStatus }) {
     sheetPost({action:"saveRedactie",uitzendingId,data:db}).then(r=>setSyncStatus(r?.ok?"ok":"fout"));
   },[db]);
 
-  const upd=(i,v)=>setRedactie(p=>p.map((r,j)=>j===i?{...r,naam:v}:r));
+  const updNaam=(i,j,v)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:r.namen.map((n,ni)=>ni===j?v:n)}));
+  const addNaam=(i)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:[...r.namen,""]}));
+  const delNaam=(i,j)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:r.namen.filter((_,ni)=>ni!==j)||[""]}));
+
   return (
     <div>
       <div style={{fontSize:11,letterSpacing:2,color:T.textMuted,marginBottom:14,fontWeight:600,textTransform:"uppercase"}}>Redactie & Rolverdeling</div>
       {redactie.map((r,i)=>(
         <div key={i} style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:6,padding:"12px 16px",marginBottom:6,
-          display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,alignItems:"center",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+          display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1.2fr",gap:12,alignItems:"start",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
           <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>FUNCTIE</div><div style={{fontSize:13,color:T.text,fontWeight:600}}>{r.functie}</div></div>
           <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>ROL</div><div style={{fontSize:12,color:T.textMuted}}>{r.taak||"—"}</div></div>
           <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>PRODUCEERT</div><div style={{fontSize:11,color:T.textMuted}}>{r.produceert}</div></div>
-          <EF label="Wie" value={r.naam} onChange={v=>upd(i,v)} placeholder="Naam invullen…"/>
+          <div>
+            <div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:4,fontWeight:600}}>WIE</div>
+            {(r.namen||[""]).map((n,j)=>(
+              <div key={j} style={{display:"flex",gap:4,marginBottom:4}}>
+                <input value={n} onChange={e=>updNaam(i,j,e.target.value)} placeholder="Naam…"
+                  style={{flex:1,padding:"5px 8px",fontSize:12,border:`1px solid ${T.inputBorder}`,
+                    borderRadius:5,background:T.inputBg,color:T.text}}/>
+                {r.namen.length>1&&(
+                  <button onClick={()=>delNaam(i,j)} style={{padding:"4px 7px",fontSize:11,border:`1px solid ${T.border}`,
+                    borderRadius:5,background:"transparent",color:"#EF4444",cursor:"pointer"}}>×</button>
+                )}
+              </div>
+            ))}
+            <button onClick={()=>addNaam(i)} style={{fontSize:10,color:BRAND.paars,background:"transparent",
+              border:"none",cursor:"pointer",padding:"0 2px",fontWeight:600}}>+ naam toevoegen</button>
+          </div>
         </div>
       ))}
     </div>
