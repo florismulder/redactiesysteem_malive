@@ -1066,9 +1066,9 @@ export default function App() {
     setRundown(baseBerekend);
     setSyncStatus("laden");
     if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
+    isLoading.current = true; // herlaad-debounce overslaan — VOOR de API-call
     sheetGet("getRundown", actieveUitzending.id).then(res=>{
       if (res?.ok) {
-        isLoading.current = true; // herlaad-debounce overslaan
         setRundown(prev=>{
           const savedData = res.data || {};
           const withData = herbereken(prev.map(item=>{
@@ -1080,8 +1080,8 @@ export default function App() {
               duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec,
               spotifyUri:saved.spotifyUri||extra.spotifyUri||item.spotifyUri };
           }), startTijd);
-          // Volgorde herstellen — zit in res.order (niet in res.data)
-          const ids = res.order?.extra?.ids;
+          // Volgorde herstellen — _order_ zit in res.data, niet in res.order
+          const ids = res.data?.["_order_"]?.extra?.ids;
           if (!ids?.length) return withData;
           const map = Object.fromEntries(withData.map(i=>[String(i.id),i]));
           const inOrder = ids.map(id=>{
