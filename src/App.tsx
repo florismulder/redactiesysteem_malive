@@ -1074,15 +1074,15 @@ export default function App() {
     setRundown(baseBerekend);
     setSyncStatus("laden");
     if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
-    isLoading.current = true; // herlaad-debounce overslaan — VOOR de API-call
     sheetGet("getRundown", actieveUitzending.id).then(res=>{
       if (res?.ok) {
+        const savedData = res.data || {};
+        // Bug B: bijhoud welke item-IDs al in de sheet staan
+        loadedIds.current = new Set(
+          Object.keys(savedData).filter(k => k !== "_order_")
+        );
+        isLoading.current = true; // herlaad-debounce overslaan — binnen .then() zodat ook de tweede debounce geblokkeerd wordt
         setRundown(prev=>{
-          const savedData = res.data || {};
-          // Bug B: bijhoud welke item-IDs al in de sheet staan — zodat leegmaken ook werkt
-          loadedIds.current = new Set(
-            Object.keys(savedData).filter(k => k !== "_order_")
-          );
           const withData = herbereken(prev.map(item=>{
             const saved = savedData[item.id] || savedData[String(item.id)];
             if (!saved) return item;
