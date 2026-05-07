@@ -1622,4 +1622,18 @@ function RedactieTab({ uitzendingId, setSyncStatus }) {
       ))}
     </div>
   );
+  async function sheetPost(body) {
+  if (!API_KLAAR) return null;
+  try {
+    const params = new URLSearchParams({
+      action: body.action,
+      uitzendingId: body.uitzendingId,
+      data: JSON.stringify(body.data),
+    });
+    const r = await fetch(`${API_URL}?${params.toString()}`);
+    const json = await r.json();
+    if (!json?.ok) console.error("SAVE FOUT", body.data?.itemId, JSON.stringify(json));
+    return json;
+  } catch(err) { console.error("FETCH FOUT", body.data?.itemId, err); return null; }
+}
 }
