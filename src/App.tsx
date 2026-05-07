@@ -1034,6 +1034,7 @@ export default function App() {
 
   const [syncStatus, setSyncStatus] = useState(API_KLAAR ? "laden" : "lokaal");
   const [highlightId, setHighlightId] = useState(null);
+  const [bevestigUurVerwijder, setBevestigUurVerwijder] = useState(false); // UI2
   const itemRefs = useRef({});
 
   const startTijd = cleanTime(actieveUitzending?.startTijd || "12:00");
@@ -1043,6 +1044,13 @@ export default function App() {
   // Tab-helpers
   const isUurTab = tab.startsWith("uur_");
   const tabUur = isUurTab ? parseInt(tab.split("_")[1]) : 0;
+
+  // Save/load refs — vóór de useEffects die ze gebruiken (Bug A fix)
+  const isLoading   = useRef(false);
+  const pendingSave = useRef(false);
+  const saveLock    = useRef(false);
+  const saveQueue   = useRef(null);
+  const loadedIds   = useRef(new Set()); // Bug B: bijhouden welke items uit sheet kwamen
 
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
 
@@ -1071,6 +1079,10 @@ export default function App() {
       if (res?.ok) {
         setRundown(prev=>{
           const savedData = res.data || {};
+          // Bug B: bijhoud welke item-IDs al in de sheet staan — zodat leegmaken ook werkt
+          loadedIds.current = new Set(
+            Object.keys(savedData).filter(k => k !== "_order_")
+          );
           const withData = herbereken(prev.map(item=>{
             const saved = savedData[item.id] || savedData[String(item.id)];
             if (!saved) return item;
@@ -1106,10 +1118,6 @@ export default function App() {
   },[actieveUitzending]);
 
   const debouncedRundown = useDebounce(rundown, 1500);
-  const isLoading = useRef(false);
-  const pendingSave = useRef(false);
-  const saveLock = useRef(false);
-  const saveQueue = useRef(null);
 
   function slaOp(rd) {
     if (!API_KLAAR || !actieveUitzending) return;
@@ -1119,6 +1127,8 @@ export default function App() {
     pendingSave.current = true;
 
     const teSlaan = rd.filter(item=>{
+      // Bug B: altijd opslaan als dit item eerder uit de sheet geladen is (zodat leegmaken werkt)
+      if (loadedIds.current.has(String(item.id))) return true;
       if (item.duurWerkelijkSec !== item.duurGeplandSec) return true;
       const e = item.extra || {};
       if (item.type==="muziek")    return !!(e.artiest||e.nummer);
@@ -1228,12 +1238,15 @@ export default function App() {
     setTab(`uur_${nieuweUur}`);
   }
 
-  // Verwijder het laatste uur van de actieve uitzending
+  // Verwijder het laatste uur — stap 1: vraag bevestiging (UI2: geen window.confirm)
   function handleVerwijderLaatsteUur() {
     if (!actieveUitzending || aantalUren <= 1) return;
+    setBevestigUurVerwijder(true);
+  }
+
+  // Verwijder het laatste uur — stap 2: uitvoeren na bevestiging
+  function handleVerwijderLaatsteUurBevestig() {
     const uurToRemove = aantalUren;
-    const itemCount = rundown.filter(i => i.uur === uurToRemove).length;
-    if (!window.confirm(`Uur ${uurToRemove} verwijderen? Dit verwijdert ${itemCount} items uit het draaiboek.`)) return;
     const nieuwRundown = herbereken(rundown.filter(i => i.uur !== uurToRemove), startTijd);
     setRundown(nieuwRundown);
     const nieuweAantal = aantalUren - 1;
@@ -1242,6 +1255,7 @@ export default function App() {
     setUitzendingen(prev => prev.map(u => u.id === updated.id ? updated : u));
     if (API_KLAAR) sheetPost({ action:"updateUitzendingMeta", uitzendingId:actieveUitzending.id, data:{ aantalUren: nieuweAantal } });
     if (tab === `uur_${uurToRemove}`) setTab(`uur_${nieuweAantal}`);
+    setBevestigUurVerwijder(false);
   }
 
   const curStr = useSim ? simTime : `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
@@ -1432,11 +1446,27 @@ export default function App() {
                 + Uur toevoegen
               </button>
               {aantalUren > 1 && (
-                <button onClick={handleVerwijderLaatsteUur}
-                  style={{padding:"5px 8px",fontSize:11,background:"#FEF2F2",border:"1px solid #FECACA",
-                    color:"#EF4444",borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>
-                  − Uur {aantalUren} verwijderen
-                </button>
+                bevestigUurVerwijder ? (
+                  <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:4,padding:"6px 8px"}}>
+                    <div style={{fontSize:10,color:"#EF4444",fontWeight:600,marginBottom:5}}>
+                      Uur {aantalUren} verwijderen?
+                    </div>
+                    <div style={{display:"flex",gap:4}}>
+                      <button onClick={handleVerwijderLaatsteUurBevestig}
+                        style={{flex:1,padding:"4px 6px",fontSize:10,background:"#EF4444",border:"none",
+                          color:"#fff",borderRadius:3,cursor:"pointer",fontWeight:700}}>Ja</button>
+                      <button onClick={()=>setBevestigUurVerwijder(false)}
+                        style={{flex:1,padding:"4px 6px",fontSize:10,background:"transparent",
+                          border:`1px solid ${T.borderDark}`,color:T.textMuted,borderRadius:3,cursor:"pointer"}}>Nee</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={handleVerwijderLaatsteUur}
+                    style={{padding:"5px 8px",fontSize:11,background:"#FEF2F2",border:"1px solid #FECACA",
+                      color:"#EF4444",borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>
+                    − Uur {aantalUren} verwijderen
+                  </button>
+                )
               )}
             </div>
           )}
