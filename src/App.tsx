@@ -1050,7 +1050,7 @@ export default function App() {
   const pendingSave = useRef(false);
   const saveLock    = useRef(false);
   const saveQueue   = useRef(null);
-  const loadedIds   = useRef(new Set()); // Bug B: bijhouden welke items uit sheet kwamen
+  const loadingTimer = useRef(null); // voorkomt post-load saves
 
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
 
@@ -1077,11 +1077,10 @@ export default function App() {
     sheetGet("getRundown", actieveUitzending.id).then(res=>{
       if (res?.ok) {
         const savedData = res.data || {};
-        // Bug B: bijhoud welke item-IDs al in de sheet staan
-        loadedIds.current = new Set(
-          Object.keys(savedData).filter(k => k !== "_order_")
-        );
-        isLoading.current = true; // herlaad-debounce overslaan — binnen .then() zodat ook de tweede debounce geblokkeerd wordt
+        // Blokkeer de debounce tijdens én na het laden via een timer
+        // (isLoading wordt NIET in de debounce-effect gereset, maar hier na 1600ms)
+        if (loadingTimer.current) clearTimeout(loadingTimer.current);
+        isLoading.current = true;
         setRundown(prev=>{
           const withData = herbereken(prev.map(item=>{
             const saved = savedData[item.id] || savedData[String(item.id)];
@@ -1092,14 +1091,13 @@ export default function App() {
               duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec,
               spotifyUri:saved.spotifyUri||extra.spotifyUri||item.spotifyUri };
           }), startTijd);
-          // Volgorde herstellen — _order_ zit in res.data, niet in res.order
+          // Volgorde herstellen — _order_ zit in res.data
           const ids = res.data?.["_order_"]?.extra?.ids;
           if (!ids?.length) return withData;
           const map = Object.fromEntries(withData.map(i=>[String(i.id),i]));
           const inOrder = ids.map(id=>{
             const existing = map[String(id)];
             if (existing) return existing;
-            // Reconstrueer toegevoegde items (niet in buildBase) vanuit opgeslagen data
             const s = savedData[String(id)];
             if (s?.type) return {
               id: Number(id)||id, type:s.type, what:s.what||s.type,
@@ -1109,10 +1107,12 @@ export default function App() {
             };
             return null;
           }).filter(Boolean);
-          // Geen 'rest' toevoegen: verwijderde items blijven verwijderd
           return herbereken(inOrder, startTijd);
         });
         setSyncStatus("ok");
+        // Geef de debounce 1600ms (iets meer dan de 1500ms delay) om uit te zakken
+        // zodat de post-load setRundown geen onnodige save triggert
+        loadingTimer.current = setTimeout(()=>{ isLoading.current = false; }, 1600);
       } else setSyncStatus("fout");
     });
   },[actieveUitzending]);
@@ -1127,8 +1127,6 @@ export default function App() {
     pendingSave.current = true;
 
     const teSlaan = rd.filter(item=>{
-      // Bug B: altijd opslaan als dit item eerder uit de sheet geladen is (zodat leegmaken werkt)
-      if (loadedIds.current.has(String(item.id))) return true;
       if (item.duurWerkelijkSec !== item.duurGeplandSec) return true;
       const e = item.extra || {};
       if (item.type==="muziek")    return !!(e.artiest||e.nummer);
@@ -1160,7 +1158,7 @@ export default function App() {
 
   useEffect(()=>{
     if (!API_KLAAR || !actieveUitzending) return;
-    if (isLoading.current) { isLoading.current = false; return; }
+    if (isLoading.current) return; // skip — isLoading wordt vrijgegeven door loadingTimer, niet hier
     slaOp(debouncedRundown);
   },[debouncedRundown]);
 
