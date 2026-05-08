@@ -222,12 +222,10 @@ async function sheetGet(action, uitzendingId) {
 async function sheetPost(body) {
   if (!API_KLAAR) return null;
   try {
-    const params = new URLSearchParams({
-      action: body.action,
-      uitzendingId: body.uitzendingId,
-      data: JSON.stringify(body.data),
+    const r = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify(body),
     });
-    const r = await fetch(`${API_URL}?${params.toString()}`);
     return await r.json();
   } catch { return null; }
 }
