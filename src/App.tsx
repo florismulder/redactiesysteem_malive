@@ -222,12 +222,10 @@ async function sheetGet(action, uitzendingId) {
 async function sheetPost(body) {
   if (!API_KLAAR) return null;
   try {
-    const params = new URLSearchParams({
-      action: body.action,
-      uitzendingId: body.uitzendingId,
-      data: JSON.stringify(body.data),
+    const r = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify(body),
     });
-    const r = await fetch(`${API_URL}?${params.toString()}`);
     return await r.json();
   } catch { return null; }
 }
@@ -1187,43 +1185,27 @@ export default function App() {
     setSyncStatus("opslaan");
     pendingSave.current = true;
 
-    const baseIds = new Set(BASE_OFFSETS.map(i => i.id));
-    const teSlaan = rd.filter(item=>{
-      // Jingles hebben geen gebruikersinhoud — nooit opslaan
-      if (item.type === "jingle") return false;
-      // Nieuw toegevoegde items (niet in basis-rundown) altijd opslaan
-      // zodat ze na herladen kunnen worden gereconstrueerd
-      if (!baseIds.has(item.id)) return true;
-      // Interview altijd opslaan — ook leeg, zodat positie en type bewaard blijven
-      if (item.type === "interview") return true;
-      // Duur aangepast t.o.v. gepland
-      if (item.duurWerkelijkSec !== item.duurGeplandSec) return true;
-      // Content-check voor overige types
-      const e = item.extra || {};
-      if (item.type==="muziek")    return !!(e.artiest||e.nummer);
-      if (item.type==="special")   return !!(e.artiest||e.nummer||e.tekst||e.lp_naam||e.verhaal||e.omschrijving||e.link||e.stem_info);
-      if (e.berichten!==undefined) return !!(e.berichten||e.intro);
-      if (e.tekst!==undefined)     return !!e.tekst;
-      return false;
-    });
-
-    const requests = [
-      { action:"saveRundownItem", uitzendingId:actieveUitzending.id,
-        data:{ itemId:"_order_", extra:{ ids: rd.map(i=>i.id) }, duurWerkelijkSec:0, spotifyUri:null }},
-      ...teSlaan.map(item=>({ action:"saveRundownItem", uitzendingId:actieveUitzending.id,
-        data:{ itemId:item.id, extra:item.extra, duurWerkelijkSec:item.duurWerkelijkSec,
-          spotifyUri:item.spotifyUri, type:item.type, what:item.what, who:item.who, uur:item.uur }}))
-    ];
-
-    (async()=>{
-      const results = [];
-      for (const req of requests) results.push(await sheetPost(req));
-      const ok = results.every(r=>r?.ok);
-      setSyncStatus(ok?"ok":"fout");
+    // Één POST-request met alle data — geen URL-limiet, geen losse requests
+    sheetPost({
+      action: "saveRundown",
+      uitzendingId: actieveUitzending.id,
+      data: {
+        order: rd.map(i => i.id),
+        items: rd.map(i => ({
+          id: i.id, extra: i.extra,
+          duurWerkelijkSec: i.duurWerkelijkSec,
+          spotifyUri: i.spotifyUri,
+          type: i.type, what: i.what, who: i.who, uur: i.uur,
+        }))
+      }
+    }).then(res => {
+      const ok = !!res?.ok;
+      setSyncStatus(ok ? "ok" : "fout");
+      if (ok) lastLoadedRundown.current = JSON.stringify(rd);
       pendingSave.current = false;
       saveLock.current = false;
-      if (saveQueue.current) { const next=saveQueue.current; saveQueue.current=null; slaOp(next); }
-    })();
+      if (saveQueue.current) { const next = saveQueue.current; saveQueue.current = null; slaOp(next); }
+    });
   }
 
   useEffect(()=>{
