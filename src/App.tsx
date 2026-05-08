@@ -222,10 +222,12 @@ async function sheetGet(action, uitzendingId) {
 async function sheetPost(body) {
   if (!API_KLAAR) return null;
   try {
-    const r = await fetch(API_URL, {
-      method: "POST",
-      body: JSON.stringify(body),
+    const params = new URLSearchParams({
+      action: body.action,
+      uitzendingId: body.uitzendingId,
+      data: JSON.stringify(body.data),
     });
+    const r = await fetch(`${API_URL}?${params.toString()}`);
     return await r.json();
   } catch { return null; }
 }
@@ -1186,13 +1188,22 @@ export default function App() {
     setSyncStatus("opslaan");
     pendingSave.current = true;
 
+    const baseIds = new Set(BASE_OFFSETS.map(i => i.id));
     const teSlaan = rd.filter(item=>{
+      // Jingles hebben geen gebruikersinhoud — nooit opslaan
+      if (item.type === "jingle") return false;
+      // Nieuw toegevoegde items (niet in basis-rundown) altijd opslaan
+      // zodat ze na herladen kunnen worden gereconstrueerd
+      if (!baseIds.has(item.id)) return true;
+      // Interview altijd opslaan — ook leeg, zodat positie en type bewaard blijven
+      if (item.type === "interview") return true;
+      // Duur aangepast t.o.v. gepland
       if (item.duurWerkelijkSec !== item.duurGeplandSec) return true;
+      // Content-check voor overige types
       const e = item.extra || {};
       if (item.type==="muziek")    return !!(e.artiest||e.nummer);
       if (item.type==="special")   return !!(e.artiest||e.nummer||e.tekst||e.lp_naam||e.verhaal||e.omschrijving||e.link||e.stem_info);
       if (e.berichten!==undefined) return !!(e.berichten||e.intro);
-      if (e.wie!==undefined)       return !!(e.wie||e.tel||e.functie||e.intro||e.vragen||e.onderwerp||e.achtergrond||e.bronnen);
       if (e.tekst!==undefined)     return !!e.tekst;
       return false;
     });
