@@ -736,7 +736,7 @@ const whoVis = {
   Muziekredactie:["Muziekredactie","Eindredactie"],
 };
 
-function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, isActive, isPast, onNaarGasten }) {
+function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, onDeleteBevestig, onDeleteAnnuleer, verwijderBevestig, onRename, isActive, isPast }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
   const readOnly = false;
@@ -791,9 +791,23 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRena
                 background:`${roleColors[w]||"#6B7280"}18`,color:roleColors[w]||T.textMuted,
                 border:`1px solid ${roleColors[w]||"#6B7280"}33`,fontWeight:500}}>{w}</span>
             ))}
-            {onDelete&&<button onClick={()=>onDelete(item.id)}
-              style={{fontSize:11,padding:"1px 6px",background:"transparent",border:`1px solid #EF444433`,
-                color:"#EF4444",borderRadius:4,cursor:"pointer",marginLeft:4}}>✕</button>}
+            {onDeleteVraag && (
+              verwijderBevestig ? (
+                <div style={{display:"flex",gap:4,alignItems:"center",marginLeft:4}}>
+                  <span style={{fontSize:10,color:"#EF4444",fontWeight:600}}>Verwijderen?</span>
+                  <button onClick={onDeleteBevestig}
+                    style={{fontSize:10,padding:"2px 8px",background:"#EF4444",border:"none",
+                      color:"#fff",borderRadius:4,cursor:"pointer",fontWeight:700}}>Ja</button>
+                  <button onClick={onDeleteAnnuleer}
+                    style={{fontSize:10,padding:"2px 8px",background:"transparent",
+                      border:`1px solid ${T.borderDark}`,color:T.textMuted,borderRadius:4,cursor:"pointer"}}>Nee</button>
+                </div>
+              ) : (
+                <button onClick={()=>onDeleteVraag(item.id)}
+                  style={{fontSize:11,padding:"1px 6px",background:"transparent",border:`1px solid #EF444433`,
+                    color:"#EF4444",borderRadius:4,cursor:"pointer",marginLeft:4}}>✕</button>
+              )
+            )}
           </div>
         </div>
 
@@ -896,7 +910,7 @@ function ToevoegenKnop({ uur, onAdd }) {
 // ════════════════════════════════════════════════════════════
 //  TimelinePanel — rechterpaneel met blokjes
 // ════════════════════════════════════════════════════════════
-function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, activeId }) {
+function TimelinePanel({ items, uur, onReorder, onDeleteVraag, onDeleteBevestig, onDeleteAnnuleer, verwijderBevestigId, onAdd, onScrollTo, activeId }) {
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOver, setDragOver] = useState(null);
 
@@ -971,9 +985,20 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, act
                   <button onClick={()=>moveItem(idx,Math.min(uurItems.length-1,idx+1))}
                     style={{background:"transparent",border:"none",cursor:"pointer",
                       fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▼</button>
-                  <button onClick={()=>onDelete(item.id)}
-                    style={{background:"transparent",border:"none",cursor:"pointer",
-                      fontSize:12,padding:"0 3px",color:isActive?"#ffaaaa":"#EF4444",lineHeight:1}}>✕</button>
+                  {verwijderBevestigId === item.id ? (
+                    <>
+                      <button onClick={()=>onDeleteBevestig(item.id)}
+                        style={{background:"#EF4444",border:"none",cursor:"pointer",
+                          fontSize:10,padding:"1px 5px",color:"#fff",borderRadius:3,lineHeight:1,fontWeight:700}}>Ja</button>
+                      <button onClick={onDeleteAnnuleer}
+                        style={{background:"transparent",border:`1px solid ${T.borderDark}`,cursor:"pointer",
+                          fontSize:10,padding:"1px 4px",color:isActive?"#fff":T.textMuted,borderRadius:3,lineHeight:1}}>Nee</button>
+                    </>
+                  ) : (
+                    <button onClick={()=>onDeleteVraag(item.id)}
+                      style={{background:"transparent",border:"none",cursor:"pointer",
+                        fontSize:12,padding:"0 3px",color:isActive?"#ffaaaa":"#EF4444",lineHeight:1}}>✕</button>
+                  )}
                 </div>
               </div>
               <div style={{fontSize:11,color:isActive?"rgba(255,255,255,0.8)":T.textLight,marginTop:2}}>
@@ -1034,7 +1059,10 @@ export default function App() {
 
   const [syncStatus, setSyncStatus] = useState(API_KLAAR ? "laden" : "lokaal");
   const [highlightId, setHighlightId] = useState(null);
-  const [bevestigUurVerwijder, setBevestigUurVerwijder] = useState(false); // UI2
+  const [bevestigUurVerwijder, setBevestigUurVerwijder] = useState(false);
+  const [verwijderBevestigId, setVerwijderBevestigId] = useState(null); // soft-delete stap 1
+  const [herstelbaarItem, setHerstelbaarItem] = useState(null);         // { item, idx } voor undo
+  const herstelTimer = useRef(null);
   const itemRefs = useRef({});
 
   const startTijd = cleanTime(actieveUitzending?.startTijd || "12:00");
@@ -1057,7 +1085,16 @@ export default function App() {
   useEffect(()=>{
     if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
     sheetGet("getUitzendingen","").then(res=>{
-      if (res?.ok && res.data?.length) { setUitzendingen(res.data); setSyncStatus("ok"); }
+      if (res?.ok && res.data?.length) {
+        setUitzendingen(res.data);
+        setSyncStatus("ok");
+        // Feature: eigen URL per uitzending — auto-select bij laden
+        const urlId = new URLSearchParams(window.location.search).get('id');
+        if (urlId) {
+          const gevonden = res.data.find(u => String(u.id) === String(urlId));
+          if (gevonden) handleSelectUitzending(gevonden);
+        }
+      }
       else setSyncStatus("fout");
     });
   },[]);
@@ -1188,6 +1225,7 @@ export default function App() {
     setSimTime(cleanTime(u.startTijd || "12:00"));
     setShowUitzendingModal(false);
     setTab("uur_1");
+    window.history.pushState({}, '', `?id=${u.id}`);
   }
 
   // Verwijder een uitzending (inclusief data in de sheet)
@@ -1197,6 +1235,7 @@ export default function App() {
       setActieveUitzending(null);
       setRundown([]);
       setShowUitzendingModal(true);
+      window.history.pushState({}, '', window.location.pathname);
     }
     if (API_KLAAR) sheetPost({ action:"deleteUitzending", uitzendingId:id, data:{} });
   }
@@ -1285,8 +1324,40 @@ export default function App() {
     }:r),startTijd));
   }
 
+  // Stap 1: vraag bevestiging
+  function handleDeleteVraag(id) {
+    setVerwijderBevestigId(id);
+  }
+
+  // Stap 2: annuleer
+  function handleDeleteAnnuleer() {
+    setVerwijderBevestigId(null);
+  }
+
+  // Stap 3: voer uit + sla op voor herstel
   function handleDelete(id) {
-    setRundown(prev=>herbereken(prev.filter(r=>r.id!==id),startTijd));
+    const idx = rundown.findIndex(r => r.id === id);
+    const item = rundown[idx];
+    if (!item) return;
+    setVerwijderBevestigId(null);
+    setRundown(prev => herbereken(prev.filter(r => r.id !== id), startTijd));
+    // Sla op voor herstel (8 seconden)
+    if (herstelTimer.current) clearTimeout(herstelTimer.current);
+    setHerstelbaarItem({ item, idx });
+    herstelTimer.current = setTimeout(() => setHerstelbaarItem(null), 8000);
+  }
+
+  // Herstel verwijderd item
+  function handleHerstel() {
+    if (!herstelbaarItem) return;
+    if (herstelTimer.current) clearTimeout(herstelTimer.current);
+    setRundown(prev => {
+      const items = [...prev];
+      const insertAt = Math.min(herstelbaarItem.idx, items.length);
+      items.splice(insertAt, 0, herstelbaarItem.item);
+      return herbereken(items, startTijd);
+    });
+    setHerstelbaarItem(null);
   }
 
   function handleReorder(newItems) {
@@ -1516,7 +1587,10 @@ export default function App() {
                   onUpdate={handleUpdate} onDuurChange={handleDuurChange}
                   onRename={handleRename}
                   onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
-                  onDelete={role==="Eindredactie"?handleDelete:null}
+                  onDeleteVraag={role==="Eindredactie" ? handleDeleteVraag : null}
+                  onDeleteBevestig={()=>handleDelete(verwijderBevestigId)}
+                  onDeleteAnnuleer={handleDeleteAnnuleer}
+                  verwijderBevestig={verwijderBevestigId === item.id}
                   isActive={getActiveId(tabUur)===item.id}
                   isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
               </div>
@@ -1533,7 +1607,10 @@ export default function App() {
             uur={tabUur}
             activeId={getActiveId(tabUur)}
             onReorder={handleReorder}
-            onDelete={handleDelete}
+            onDeleteVraag={handleDeleteVraag}
+            onDeleteBevestig={handleDelete}
+            onDeleteAnnuleer={handleDeleteAnnuleer}
+            verwijderBevestigId={verwijderBevestigId}
             onAdd={(uur,type)=>handleAddItem(uur,type,"einde")}
             onScrollTo={scrollToItem}
           />
@@ -1552,6 +1629,26 @@ export default function App() {
       />
       <ZoekModal open={zoekOpen} onClose={()=>setZoekOpen(false)}
         onSelect={handleTrackSelect}/>
+
+      {/* Undo toast — verschijnt 8 seconden na verwijderen */}
+      {herstelbaarItem && (
+        <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",
+          background:"#1F2937",color:"#fff",padding:"12px 20px",borderRadius:10,
+          display:"flex",alignItems:"center",gap:14,zIndex:6000,
+          boxShadow:"0 4px 20px rgba(0,0,0,0.35)",whiteSpace:"nowrap"}}>
+          <span style={{fontSize:13}}>
+            <span style={{opacity:0.7}}>Verwijderd:</span> <strong>{herstelbaarItem.item.what}</strong>
+          </span>
+          <button onClick={handleHerstel} style={{
+            padding:"5px 14px",background:BRAND.roze,border:"none",color:"#fff",
+            borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:700,flexShrink:0}}>
+            ↩ Herstellen
+          </button>
+          <button onClick={()=>{ clearTimeout(herstelTimer.current); setHerstelbaarItem(null); }}
+            style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.5)",
+              cursor:"pointer",fontSize:16,padding:"0 2px",lineHeight:1}}>✕</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1622,18 +1719,4 @@ function RedactieTab({ uitzendingId, setSyncStatus }) {
       ))}
     </div>
   );
-  async function sheetPost(body) {
-  if (!API_KLAAR) return null;
-  try {
-    const params = new URLSearchParams({
-      action: body.action,
-      uitzendingId: body.uitzendingId,
-      data: JSON.stringify(body.data),
-    });
-    const r = await fetch(`${API_URL}?${params.toString()}`);
-    const json = await r.json();
-    if (!json?.ok) console.error("SAVE FOUT", body.data?.itemId, JSON.stringify(json));
-    return json;
-  } catch(err) { console.error("FETCH FOUT", body.data?.itemId, err); return null; }
-}
 }
