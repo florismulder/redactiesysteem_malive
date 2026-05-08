@@ -671,14 +671,14 @@ function TekstPopup({ open, label, value, onChange, onClose }) {
 // ════════════════════════════════════════════════════════════
 //  EditableField
 // ════════════════════════════════════════════════════════════
-function EF({ label, value, onChange, multiline=false, placeholder="", disabled=false }) {
+function EF({ label, value, onChange, multiline=false, placeholder="", disabled=false, minHeight=96 }) {
   const [popupOpen, setPopupOpen] = useState(false);
   const s={width:"100%",background:disabled?"transparent":"rgba(255,255,255,0.7)",border:disabled?"none":`1px solid #9CA3AF`,color:"#0A0C10",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
     lineHeight:"1.5",borderRadius:4,boxSizing:"border-box",resize:"vertical"};
   if (disabled) return (
     <div style={{marginBottom:8}}>
       {label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}
-      <div style={{...s,whiteSpace:"pre-wrap",color:value?"#0A0C10":"#9CA3AF",minHeight:multiline?40:undefined}}>{value||placeholder}</div>
+      <div style={{...s,whiteSpace:"pre-wrap",color:value?"#0A0C10":"#9CA3AF",minHeight:multiline?minHeight:undefined}}>{value||placeholder}</div>
     </div>
   );
   return (
@@ -692,7 +692,7 @@ function EF({ label, value, onChange, multiline=false, placeholder="", disabled=
               boxShadow:"0 1px 3px rgba(0,0,0,0.1)",marginTop:1}}>
             ⛶
           </button>
-          <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:56,flex:1}}/>
+          <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight,flex:1}}/>
           <TekstPopup open={popupOpen} label={label} value={value} onChange={onChange} onClose={()=>setPopupOpen(false)}/>
         </div>
       ) : (
@@ -720,8 +720,8 @@ function InterviewBlok({ item, upd, onDuurChange, readOnly }) {
         <EF label="Functie" value={e.functie} onChange={v=>upd("functie",v)} placeholder="Functie / rol" disabled={readOnly}/>
         <EF label="Onderwerp" value={e.onderwerp} onChange={v=>upd("onderwerp",v)} placeholder="Waar gaat het gesprek over?" disabled={readOnly}/>
       </div>
-      <EF label="Introductietekst" value={e.intro} onChange={v=>upd("intro",v)} multiline placeholder="Schrijf hier de introductietekst…" disabled={readOnly}/>
-      <EF label="Interviewvragen" value={e.vragen} onChange={v=>upd("vragen",v)} multiline placeholder={"1. …\n2. …\n3. …"} disabled={readOnly}/>
+      <EF label="Introductietekst" value={e.intro} onChange={v=>upd("intro",v)} multiline minHeight={140} placeholder="Schrijf hier de introductietekst…" disabled={readOnly}/>
+      <EF label="Interviewvragen" value={e.vragen} onChange={v=>upd("vragen",v)} multiline minHeight={160} placeholder={"1. …\n2. …\n3. …"} disabled={readOnly}/>
 
       <button onClick={()=>setUitklap(u=>!u)} style={{
         display:"flex",alignItems:"center",gap:6,padding:"5px 0",
@@ -794,7 +794,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, o
                 onClick={e=>e.stopPropagation()}
                 style={{fontSize:13,color:"#0D0F12",fontWeight:600,background:"transparent",
                   border:"none",borderBottom:"1px dashed #C8CDD5",outline:"none",
-                  padding:"0 2px",minWidth:120,maxWidth:440,
+                  padding:"0 2px",minWidth:120,flex:1,
                   fontFamily:"'Inter','Segoe UI',sans-serif"}}
               />
             ) : (
