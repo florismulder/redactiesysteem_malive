@@ -1091,12 +1091,11 @@ export default function App() {
   const isUurTab = tab.startsWith("uur_");
   const tabUur = isUurTab ? parseInt(tab.split("_")[1]) : 0;
 
-  // Save/load refs — vóór de useEffects die ze gebruiken (Bug A fix)
-  const isLoading   = useRef(false);
+  // Save/load refs
   const pendingSave = useRef(false);
   const saveLock    = useRef(false);
   const saveQueue   = useRef(null);
-  const loadingTimer = useRef(null); // voorkomt post-load saves
+  const lastLoadedRundown = useRef(null); // JSON van wat er geladen is — save alleen als er iets veranderd is
 
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
 
@@ -1128,7 +1127,6 @@ export default function App() {
     if (!actieveUitzending) return;
     const n = actieveUitzending.aantalUren || 2;
     let base = buildBase(startTijd);
-    // Voeg basis-items toe voor extra uren (> 2)
     for (let u = 3; u <= n; u++) {
       base = [...base, ...buildUurBase(u, startTijd)];
     }
@@ -1139,23 +1137,24 @@ export default function App() {
     sheetGet("getRundown", actieveUitzending.id).then(res=>{
       if (res?.ok) {
         const savedData = res.data || {};
-        // Blokkeer de debounce tijdens én na het laden via een timer
-        // (isLoading wordt NIET in de debounce-effect gereset, maar hier na 1600ms)
-        if (loadingTimer.current) clearTimeout(loadingTimer.current);
-        isLoading.current = true;
-        setRundown(prev=>{
-          const withData = herbereken(prev.map(item=>{
-            const saved = savedData[item.id] || savedData[String(item.id)];
-            if (!saved) return item;
-            const extra = saved.extra || saved;
-            return { ...item,
-              extra:{...item.extra,...extra},
-              duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec,
-              spotifyUri:saved.spotifyUri||extra.spotifyUri||item.spotifyUri };
-          }), startTijd);
-          // Volgorde herstellen — _order_ zit in res.data
-          const ids = res.data?.["_order_"]?.extra?.ids;
-          if (!ids?.length) return withData;
+
+        // Bereken loadedRundown op basis van baseBerekend (niet prev) zodat we
+        // hem synchroon kunnen opslaan — geen setRundown-callback of setTimeout nodig
+        const withData = herbereken(baseBerekend.map(item=>{
+          const saved = savedData[item.id] || savedData[String(item.id)];
+          if (!saved) return item;
+          const extra = saved.extra || saved;
+          return { ...item,
+            extra:{...item.extra,...extra},
+            duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec,
+            spotifyUri:saved.spotifyUri||extra.spotifyUri||item.spotifyUri };
+        }), startTijd);
+
+        const ids = res.data?.["_order_"]?.extra?.ids;
+        let loadedRundown;
+        if (!ids?.length) {
+          loadedRundown = withData;
+        } else {
           const map = Object.fromEntries(withData.map(i=>[String(i.id),i]));
           const inOrder = ids.map(id=>{
             const existing = map[String(id)];
@@ -1169,12 +1168,12 @@ export default function App() {
             };
             return null;
           }).filter(Boolean);
-          return herbereken(inOrder, startTijd);
-        });
+          loadedRundown = herbereken(inOrder, startTijd);
+        }
+
+        setRundown(loadedRundown);
+        lastLoadedRundown.current = JSON.stringify(loadedRundown); // synchroon, altijd correct
         setSyncStatus("ok");
-        // Geef de debounce 1600ms (iets meer dan de 1500ms delay) om uit te zakken
-        // zodat de post-load setRundown geen onnodige save triggert
-        loadingTimer.current = setTimeout(()=>{ isLoading.current = false; }, 1600);
       } else setSyncStatus("fout");
     });
   },[actieveUitzending]);
@@ -1229,7 +1228,11 @@ export default function App() {
 
   useEffect(()=>{
     if (!API_KLAAR || !actieveUitzending) return;
-    if (isLoading.current) return; // skip — isLoading wordt vrijgegeven door loadingTimer, niet hier
+    // Alleen opslaan als er iets veranderd is t.o.v. wat er geladen is
+    // lastLoadedRundown is null zolang de load nog niet klaar is → skip
+    if (lastLoadedRundown.current === null) return;
+    const current = JSON.stringify(debouncedRundown);
+    if (current === lastLoadedRundown.current) return; // niets veranderd
     slaOp(debouncedRundown);
   },[debouncedRundown]);
 
@@ -1254,7 +1257,7 @@ export default function App() {
   }
 
   function handleSelectUitzending(u) {
-    isLoading.current = true;
+    lastLoadedRundown.current = null; // reset — debounce slaat niet op vóór load klaar is
     setActieveUitzending(u);
     setSimTime(cleanTime(u.startTijd || "12:00"));
     setShowUitzendingModal(false);
