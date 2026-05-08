@@ -264,7 +264,7 @@ function SyncBadge({ status }) {
 // ════════════════════════════════════════════════════════════
 //  UitzendingModal — met verwijderknop per uitzending
 // ════════════════════════════════════════════════════════════
-function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDelete, onCopy }) {
+function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDelete, onCopy, laadFout, onHerlaad }) {
   const [nieuwDatum, setNieuwDatum] = useState("");
   const [nieuwNaam, setNieuwNaam] = useState("");
   const [nieuwStart, setNieuwStart] = useState("12:00");
@@ -322,8 +322,26 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
 
         <div style={{overflowY:"auto",flex:1}}>
           {uitzendingen.length === 0 && !aanmaken && (
-            <div style={{padding:"32px 24px",color:T.textMuted,textAlign:"center",fontSize:13}}>
-              {API_KLAAR ? "⏳ Uitzendingen worden geladen…" : "Nog geen uitzendingen. Maak er een aan om te beginnen."}
+            <div style={{padding:"32px 24px",textAlign:"center"}}>
+              {laadFout ? (
+                <>
+                  <div style={{fontSize:13,color:"#EF4444",fontWeight:600,marginBottom:8}}>
+                    ✕ Laden mislukt
+                  </div>
+                  <div style={{fontSize:12,color:T.textMuted,marginBottom:16}}>
+                    Controleer je verbinding of probeer het opnieuw.
+                  </div>
+                  <button onClick={onHerlaad} style={{
+                    padding:"8px 20px",background:BRAND.gradient,border:"none",
+                    color:"#fff",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:700}}>
+                    ↺ Opnieuw proberen
+                  </button>
+                </>
+              ) : (
+                <div style={{fontSize:13,color:T.textMuted}}>
+                  {API_KLAAR ? "⏳ Uitzendingen worden geladen…" : "Nog geen uitzendingen. Maak er een aan om te beginnen."}
+                </div>
+              )}
             </div>
           )}
           {uitzendingen.map(u => (
@@ -1080,22 +1098,29 @@ export default function App() {
 
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
 
-  useEffect(()=>{
+  const [uitzendingLoadFout, setUitzendingLoadFout] = useState(false);
+
+  function laadUitzendingen() {
+    setUitzendingLoadFout(false);
+    setSyncStatus("laden");
     if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
     sheetGet("getUitzendingen","").then(res=>{
       if (res?.ok && res.data?.length) {
         setUitzendingen(res.data);
         setSyncStatus("ok");
-        // Feature: eigen URL per uitzending — auto-select bij laden
         const urlId = new URLSearchParams(window.location.search).get('id');
         if (urlId) {
           const gevonden = res.data.find(u => String(u.id) === String(urlId));
           if (gevonden) handleSelectUitzending(gevonden);
         }
+      } else {
+        setSyncStatus("fout");
+        setUitzendingLoadFout(true);
       }
-      else setSyncStatus("fout");
     });
-  },[]);
+  }
+
+  useEffect(()=>{ laadUitzendingen(); },[]);
 
   useEffect(()=>{
     if (!actieveUitzending) return;
@@ -1624,6 +1649,8 @@ export default function App() {
         onClose={uitzendingen.length>0?()=>setShowUitzendingModal(false):null}
         onDelete={handleDeleteUitzending}
         onCopy={handleCopyUitzending}
+        laadFout={uitzendingLoadFout}
+        onHerlaad={laadUitzendingen}
       />
       <ZoekModal open={zoekOpen} onClose={()=>setZoekOpen(false)}
         onSelect={handleTrackSelect}/>
