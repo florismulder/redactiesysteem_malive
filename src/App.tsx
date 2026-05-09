@@ -634,7 +634,6 @@ function InterviewBlok({ item, upd, onDuurChange, readOnly }) {
   const [uitklap, setUitklap] = useState(false);
   const e = item.extra;
 
-  // Hulpfunctie: bereken duur op basis van gecombineerde woordentelling
   function berekenDuur(intro, vragen) {
     const sec = Math.max(60, Math.ceil(
       ((intro||"")+" "+(vragen||"")).trim().split(/\s+/).filter(Boolean).length / 130 * 60
@@ -653,9 +652,11 @@ function InterviewBlok({ item, upd, onDuurChange, readOnly }) {
         <EF label="Functie" value={e.functie} onChange={v=>upd("functie",v)} placeholder="Functie / rol" disabled={readOnly}/>
         <EF label="Onderwerp" value={e.onderwerp} onChange={v=>upd("onderwerp",v)} placeholder="Waar gaat het gesprek over?" disabled={readOnly}/>
       </div>
-      <EF label="Introductietekst" value={e.intro} onChange={v=>{ upd("intro",v); berekenDuur(v, e.vragen); }}
+      <EF label="Introductietekst" value={e.intro}
+        onChange={v=>{ upd("intro",v); berekenDuur(v, e.vragen); }}
         multiline minHeight={140} placeholder="Schrijf hier de introductietekst…" disabled={readOnly}/>
-      <EF label="Interviewvragen" value={e.vragen} onChange={v=>{ upd("vragen",v); berekenDuur(e.intro, v); }}
+      <EF label="Interviewvragen" value={e.vragen}
+        onChange={v=>{ upd("vragen",v); berekenDuur(e.intro, v); }}
         multiline minHeight={160} placeholder={"1. …\n2. …\n3. …"} disabled={readOnly}/>
 
       <button onClick={()=>setUitklap(u=>!u)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",
@@ -1250,6 +1251,121 @@ export default function App() {
     setTimeout(()=>setHighlightId(null), 2000);
   }
 
+  function printRundown() {
+    const uitz = actieveUitzending;
+    if (!uitz) return;
+
+    function tekst(blok) {
+      const e = blok.extra || {};
+      const regels = [];
+      if (blok.type === "muziek") {
+        if (e.artiest || e.nummer) regels.push(`<div class="muziek-titel">${[e.artiest, e.nummer].filter(Boolean).join(' — ')}</div>`);
+        if (e.feitje) regels.push(`<div class="veld"><span class="label">Feitje</span><p>${e.feitje}</p></div>`);
+      }
+      if (blok.type === "tekst") {
+        if (e.tekst) regels.push(`<div class="veld"><p>${e.tekst.replace(/\n/g,'<br>')}</p></div>`);
+      }
+      if (blok.type === "nieuws") {
+        if (e.intro) regels.push(`<div class="veld"><span class="label">Intro</span><p>${e.intro.replace(/\n/g,'<br>')}</p></div>`);
+        if (e.berichten) regels.push(`<div class="veld"><span class="label">Berichten</span><p>${e.berichten.replace(/\n/g,'<br>')}</p></div>`);
+      }
+      if (blok.type === "interview") {
+        const gastregel = [e.wie, e.functie].filter(Boolean).join(', ');
+        if (gastregel) regels.push(`<div class="veld"><span class="label">Gast</span><p>${gastregel}${e.type?' ('+e.type+')':''}${e.tel?' · '+e.tel:''}</p></div>`);
+        if (e.onderwerp) regels.push(`<div class="veld"><span class="label">Onderwerp</span><p>${e.onderwerp}</p></div>`);
+        if (e.intro) regels.push(`<div class="veld"><span class="label">Introductietekst</span><p>${e.intro.replace(/\n/g,'<br>')}</p></div>`);
+        if (e.vragen) regels.push(`<div class="veld"><span class="label">Interviewvragen</span><p>${e.vragen.replace(/\n/g,'<br>')}</p></div>`);
+      }
+      if (blok.type === "special") {
+        if (e.tekst) regels.push(`<div class="veld"><p>${e.tekst.replace(/\n/g,'<br>')}</p></div>`);
+        if (e.verhaal) regels.push(`<div class="veld"><span class="label">Verhaal</span><p>${e.verhaal.replace(/\n/g,'<br>')}</p></div>`);
+        if (e.lp_naam || e.artiest) regels.push(`<div class="veld"><span class="label">LP</span><p>${[e.lp_naam, e.artiest].filter(Boolean).join(' — ')}</p></div>`);
+        if (e.omschrijving) regels.push(`<div class="veld"><span class="label">Omschrijving</span><p>${e.omschrijving.replace(/\n/g,'<br>')}</p></div>`);
+        if (e.link) regels.push(`<div class="veld"><span class="label">Link</span><p>${e.link}</p></div>`);
+      }
+      if (blok.type === "jingle") {
+        regels.push(`<div class="jingle-label">${e.label || blok.what}</div>`);
+      }
+      return regels.join('');
+    }
+
+    const typeKleur = { muziek:"#1565C0", jingle:"#C62828", tekst:"#CC00BB", nieuws:"#2E7D32", interview:"#E64A19", special:"#00796B" };
+    const typeLabel = { muziek:"MUZIEK", jingle:"JINGLE", tekst:"TEKST", nieuws:"NIEUWS", interview:"INTERVIEW", special:"SPECIAL" };
+
+    const uren = [...new Set(rundown.map(i=>i.uur))].sort((a,b)=>a-b);
+
+    const html = `<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Draaiboek — ${formatUitzendingNaam(uitz)}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Georgia', serif; font-size: 11pt; color: #111; background: #fff; }
+  .header { padding: 24px 32px 16px; border-bottom: 3px solid #111; margin-bottom: 24px; }
+  .header h1 { font-size: 22pt; font-weight: bold; letter-spacing: -0.5px; }
+  .header .meta { font-size: 10pt; color: #555; margin-top: 6px; font-family: 'Arial', sans-serif; }
+  .uur-header { font-family: 'Arial', sans-serif; font-size: 9pt; font-weight: bold; letter-spacing: 3px; text-transform: uppercase; color: #888; padding: 0 32px; margin: 24px 0 8px; }
+  .blok { display: flex; gap: 0; padding: 10px 32px; border-bottom: 1px solid #e8e8e8; page-break-inside: avoid; }
+  .blok:last-child { border-bottom: none; }
+  .blok-tijd { width: 52px; flex-shrink: 0; padding-top: 2px; }
+  .blok-tijd .tijd { font-family: 'Courier New', monospace; font-size: 10pt; font-weight: bold; color: #111; }
+  .blok-tijd .duur { font-family: 'Courier New', monospace; font-size: 8pt; color: #888; margin-top: 2px; }
+  .blok-balk { width: 3px; flex-shrink: 0; margin: 0 12px; border-radius: 2px; }
+  .blok-inhoud { flex: 1; }
+  .blok-kop { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  .type-badge { font-family: 'Arial', sans-serif; font-size: 7pt; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; }
+  .blok-naam { font-family: 'Arial', sans-serif; font-size: 11pt; font-weight: bold; color: #111; }
+  .veld { margin-top: 5px; }
+  .veld .label { font-family: 'Arial', sans-serif; font-size: 8pt; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; color: #888; display: block; margin-bottom: 2px; }
+  .veld p { font-size: 11pt; line-height: 1.65; color: #222; white-space: pre-wrap; }
+  .muziek-titel { font-family: 'Arial', sans-serif; font-size: 12pt; font-weight: bold; color: #1565C0; margin-bottom: 4px; }
+  .jingle-label { font-family: 'Arial', sans-serif; font-size: 10pt; color: #888; font-style: italic; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .blok { page-break-inside: avoid; }
+    .uur-sectie { page-break-before: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>${formatUitzendingNaam(uitz)}</h1>
+  <div class="meta">${formatDatum(uitz.datum)} · ${cleanTime(uitz.startTijd||'12:00')} – ${cleanTime(uitz.eindTijd||'14:00')} · ${aantalUren} uur</div>
+</div>
+${uren.map(uur => {
+  const items = rundown.filter(i=>i.uur===uur);
+  return `<div class="uur-sectie">
+<div class="uur-header">Uur ${uur} — ${addSec(startTijd,(uur-1)*3600)} tot ${addSec(startTijd,uur*3600)}</div>
+${items.map(item => {
+  const kleur = typeKleur[item.type] || '#555';
+  const inhoud = tekst(item);
+  return `<div class="blok">
+  <div class="blok-tijd">
+    <div class="tijd">${item.timeBerekend||item.time}</div>
+    <div class="duur">${toMMSS(item.duurWerkelijkSec)}</div>
+  </div>
+  <div class="blok-balk" style="background:${kleur}"></div>
+  <div class="blok-inhoud">
+    <div class="blok-kop">
+      <span class="type-badge" style="background:${kleur}18;color:${kleur}">${typeLabel[item.type]||item.type.toUpperCase()}</span>
+      <span class="blok-naam">${item.extra._naam||item.what}</span>
+    </div>
+    ${inhoud}
+  </div>
+</div>`;
+}).join('')}
+</div>`;
+}).join('')}
+<script>window.onload=()=>window.print();</script>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+  }
+
   function handleAddItem(uur, type, positie="einde") {
     const typeDefaults = {
       muziek:    { dur:180, extra:{artiest:"",nummer:"",feitje:""}, who:["Techniek","Muziekredactie"] },
@@ -1313,6 +1429,11 @@ export default function App() {
         {actieveUitzending && API_KLAAR && syncStatus!=="lokaal" && (
           <button onClick={()=>slaOp(rundown)} style={{padding:"4px 10px",fontSize:10,fontWeight:700,borderRadius:4,cursor:"pointer",background:syncStatus==="fout"?"#EF4444":BRAND.paars,color:"#fff",border:"none"}}>
             💾 Nu opslaan
+          </button>
+        )}
+        {actieveUitzending && (
+          <button onClick={printRundown} style={{padding:"4px 10px",fontSize:10,fontWeight:700,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>
+            🖨 Printen
           </button>
         )}
         <div style={{fontSize:14,color:T.text,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>
