@@ -282,13 +282,13 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
   function handleKopieerClick(e, u) {
     e.stopPropagation();
     setBevestigId(null);
-    setKopieerInfo({ id: u.id, datum: "", naam: `Kopie van ${formatUitzendingNaam(u)}` });
+    setKopieerInfo({ id: u.id, datum: "", naam: `Kopie van ${formatUitzendingNaam(u)}`, startTijd: cleanTime(u.startTijd||"12:00"), eindTijd: cleanTime(u.eindTijd||"14:00") });
   }
 
   function handleKopieerBevestig(e) {
     e.stopPropagation();
     if (!kopieerInfo?.datum) return;
-    onCopy(kopieerInfo.id, { datum: kopieerInfo.datum, naam: kopieerInfo.naam });
+    onCopy(kopieerInfo.id, { datum: kopieerInfo.datum, naam: kopieerInfo.naam, startTijd: kopieerInfo.startTijd, eindTijd: kopieerInfo.eindTijd });
     setKopieerInfo(null);
   }
 
@@ -362,17 +362,27 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
               {kopieerInfo?.id === u.id && (
                 <div style={{padding:"12px 24px",background:"#F9F0FF",borderBottom:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:8}} onClick={e=>e.stopPropagation()}>
                   <div style={{fontSize:11,color:BRAND.paars,fontWeight:600,letterSpacing:1,textTransform:"uppercase"}}>Kopiëren naar nieuwe uitzending</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:8}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
                     <div>
                       <div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>NIEUWE DATUM</div>
                       <input type="date" value={kopieerInfo.datum} onChange={e=>setKopieerInfo(p=>({...p,datum:e.target.value}))}
                         style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
                     </div>
                     <div>
-                      <div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>NAAM (optioneel)</div>
-                      <input type="text" value={kopieerInfo.naam} onChange={e=>setKopieerInfo(p=>({...p,naam:e.target.value}))}
+                      <div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>START</div>
+                      <input type="time" value={kopieerInfo.startTijd||"12:00"} onChange={e=>setKopieerInfo(p=>({...p,startTijd:e.target.value}))}
                         style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
                     </div>
+                    <div>
+                      <div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>EIND</div>
+                      <input type="time" value={kopieerInfo.eindTijd||"14:00"} onChange={e=>setKopieerInfo(p=>({...p,eindTijd:e.target.value}))}
+                        style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>NAAM (optioneel)</div>
+                    <input type="text" value={kopieerInfo.naam} onChange={e=>setKopieerInfo(p=>({...p,naam:e.target.value}))}
+                      style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
                   </div>
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={handleKopieerBevestig} disabled={!kopieerInfo.datum}
@@ -1141,15 +1151,15 @@ export default function App() {
     if (API_KLAAR) sheetPost({ action:"deleteUitzending", uitzendingId:id, data:{} });
   }
 
-  async function handleCopyUitzending(bronId, { datum, naam }) {
+  async function handleCopyUitzending(bronId, { datum, naam, startTijd: nieuweStart, eindTijd: nieuwEind }) {
     const bron = uitzendingen.find(u => u.id === bronId);
     if (!bron) return;
     const nieuwId = "uitz_" + Date.now();
     const kopiee = {
       id: nieuwId, datum,
       naam: naam || `Kopie van ${formatUitzendingNaam(bron)}`,
-      startTijd: bron.startTijd || "12:00",
-      eindTijd:  bron.eindTijd  || "14:00",
+      startTijd: nieuweStart || bron.startTijd || "12:00",
+      eindTijd:  nieuwEind  || bron.eindTijd  || "14:00",
       aantalUren: bron.aantalUren || 2,
     };
     if (API_KLAAR) await sheetPost({ action:"copyUitzending", uitzendingId:bronId, data:kopiee });
