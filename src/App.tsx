@@ -429,6 +429,9 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
                   </button>
                 </div>
               )}
+            </div>
+          ))}
+        </div>
 
         <div style={{borderTop:`1px solid ${T.border}`,padding:"16px 24px"}}>
           {!aanmaken ? (
