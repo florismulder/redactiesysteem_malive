@@ -251,7 +251,7 @@ function SyncBadge({ status }) {
 // ════════════════════════════════════════════════════════════
 //  UitzendingModal
 // ════════════════════════════════════════════════════════════
-function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDelete, onCopy, laadFout, onHerlaad }) {
+function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDelete, onCopy, onRename, laadFout, onHerlaad }) {
   const [nieuwDatum, setNieuwDatum] = useState("");
   const [nieuwNaam, setNieuwNaam] = useState("");
   const [nieuwStart, setNieuwStart] = useState("12:00");
@@ -259,6 +259,14 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
   const [aanmaken, setAanmaken] = useState(false);
   const [bevestigId, setBevestigId] = useState(null);
   const [kopieerInfo, setKopieerInfo] = useState(null);
+  const [hernoemInfo, setHernoemInfo] = useState(null); // { id, naam }
+
+  function handleHernoemClick(e, u) {
+    e.stopPropagation();
+    setBevestigId(null);
+    setKopieerInfo(null);
+    setHernoemInfo({ id: u.id, naam: formatUitzendingNaam(u) });
+  }
 
   function handleCreate() {
     if (!nieuwDatum) return;
@@ -347,6 +355,10 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
                   </div>
                 ) : (
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <button onClick={e=>handleHernoemClick(e, u)} title="Naam aanpassen"
+                      style={{background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}}
+                      onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+                      onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>✏</button>
                     <button onClick={e=>handleKopieerClick(e, u)} title="Uitzending kopiëren"
                       style={{background:"transparent",border:`1px solid ${T.border}`,color:BRAND.paars,borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}}
                       onMouseEnter={e=>e.currentTarget.style.opacity="1"}
@@ -392,9 +404,31 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
                   </div>
                 </div>
               )}
-            </div>
-          ))}
-        </div>
+              {hernoemInfo?.id === u.id && (
+                <div style={{padding:"12px 24px",background:"#F0F9FF",borderBottom:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"flex-end"}}
+                  onClick={e=>e.stopPropagation()}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>NIEUWE NAAM</div>
+                    <input autoFocus type="text" value={hernoemInfo.naam}
+                      onChange={e=>setHernoemInfo(p=>({...p,naam:e.target.value}))}
+                      onKeyDown={e=>{
+                        if (e.key==="Enter" && hernoemInfo.naam.trim()) { onRename(hernoemInfo.id, hernoemInfo.naam.trim()); setHernoemInfo(null); }
+                        if (e.key==="Escape") setHernoemInfo(null);
+                      }}
+                      style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 10px",fontSize:13,borderRadius:6,boxSizing:"border-box"}}/>
+                  </div>
+                  <button onClick={()=>{ if(hernoemInfo.naam.trim()) { onRename(hernoemInfo.id, hernoemInfo.naam.trim()); setHernoemInfo(null); } }}
+                    disabled={!hernoemInfo.naam.trim()}
+                    style={{padding:"6px 16px",background:hernoemInfo.naam.trim()?BRAND.gradient:"#E5E7EB",border:"none",
+                      color:hernoemInfo.naam.trim()?"#fff":T.textMuted,borderRadius:6,cursor:hernoemInfo.naam.trim()?"pointer":"default",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>
+                    Opslaan
+                  </button>
+                  <button onClick={()=>setHernoemInfo(null)}
+                    style={{padding:"6px 12px",background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,borderRadius:6,cursor:"pointer",fontSize:12}}>
+                    Annuleer
+                  </button>
+                </div>
+              )}
 
         <div style={{borderTop:`1px solid ${T.border}`,padding:"16px 24px"}}>
           {!aanmaken ? (
@@ -1140,6 +1174,12 @@ export default function App() {
     window.history.pushState({}, '', `?id=${u.id}`);
   }
 
+  function handleRenameUitzending(id, nieuweNaam) {
+    setUitzendingen(prev => prev.map(u => u.id === id ? { ...u, naam: nieuweNaam } : u));
+    if (actieveUitzending?.id === id) setActieveUitzending(prev => ({ ...prev, naam: nieuweNaam }));
+    if (API_KLAAR) sheetPost({ action:"updateUitzendingMeta", uitzendingId:id, data:{ naam: nieuweNaam } });
+  }
+
   function handleDeleteUitzending(id) {
     setUitzendingen(prev => prev.filter(u => u.id !== id));
     if (actieveUitzending?.id === id) {
@@ -1597,6 +1637,7 @@ ${items.map(item => {
         onClose={uitzendingen.length>0?()=>setShowUitzendingModal(false):null}
         onDelete={handleDeleteUitzending}
         onCopy={handleCopyUitzending}
+        onRename={handleRenameUitzending}
         laadFout={uitzendingLoadFout}
         onHerlaad={laadUitzendingen}
       />
