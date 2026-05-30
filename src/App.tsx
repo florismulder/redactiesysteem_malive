@@ -1,11 +1,24 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from "react";
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref as dbRef, set, get, onValue, update, remove } from "firebase/database";
 
 // ════════════════════════════════════════════════════════════
-//  ⚙️  CONFIGURATIE — vul jouw Apps Script URL in:
+//  ⚙️  Firebase configuratie
 // ════════════════════════════════════════════════════════════
-const API_URL = "https://script.google.com/macros/s/AKfycbz3eJYN5ma_SuPwocnDtI1-XjafTXh7mORZab8XXn2StGkfEecLyDHLR_1bXh8RcP1n/exec";
-const API_KLAAR = !API_URL.includes("JOUW_DEPLOYMENT_ID");
+const firebaseConfig = {
+  apiKey: "AIzaSyBlUnaR98BIeBjfqtzBv39L42R2oveMMs0",
+  authDomain: "redactiesysteem-malive.firebaseapp.com",
+  databaseURL: "https://redactiesysteem-malive-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "redactiesysteem-malive",
+  storageBucket: "redactiesysteem-malive.firebasestorage.app",
+  messagingSenderId: "282763197094",
+  appId: "1:282763197094:web:4cf20c9586c7cbbc4d1267",
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getDatabase(firebaseApp);
+const DB_KLAAR = true;
 
 // ─── kleuren (licht thema) ────────────────────────────────
 const BRAND = {
@@ -198,28 +211,105 @@ function driftSec(items, uur, startTijd = "12:00") {
 // ════════════════════════════════════════════════════════════
 //  Google Sheets API
 // ════════════════════════════════════════════════════════════
-async function sheetGet(action, uitzendingId) {
-  if (!API_KLAAR) return null;
-  try {
-    const r = await fetch(`${API_URL}?action=${action}&uitzendingId=${encodeURIComponent(uitzendingId)}`);
-    return await r.json();
-  } catch { return null; }
+
+// ─── Firebase sync helpers ─────────────────────────────────
+
+const BASE_IDS = new Set(BASE_OFFSETS.map(b => b.id));
+
+// Canonical item format for Firebase
+function itemToFb(item) {
+  return {
+    extra: item.extra,
+    duurWerkelijkSec: item.duurWerkelijkSec,
+    spotifyUri: item.spotifyUri || null,
+    type: item.type,
+    what: item.what,
+    who: item.who || [],
+    uur: item.uur || 1,
+  };
 }
 
-async function sheetPost(body) {
-  if (!API_KLAAR) return null;
-  try {
-    const r = await fetch(API_URL, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-    return await r.json();
-  } catch { return null; }
+// Canonical JSON voor sync-vergelijking (gesorteerd op id)
+function toSyncKey(rundown) {
+  return JSON.stringify({
+    order: rundown.map(i => String(i.id)),
+    items: [...rundown]
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+      .map(i => ({ id: String(i.id), ...itemToFb(i) }))
+  });
 }
 
-// ════════════════════════════════════════════════════════════
-//  Debounce hook
-// ════════════════════════════════════════════════════════════
+// Verwerk Firebase snapshot naar lokale rundown state
+// recentlyEdited: Map van id (string) → timestamp
+function applyFirebaseData(currentRundown, fbData, startTijd, recentlyEdited) {
+  if (!fbData) return currentRundown;
+  const { items: fbItems = {}, order: fbOrder = [] } = fbData;
+  const now = Date.now();
+
+  const currentById = Object.fromEntries(currentRundown.map(i => [String(i.id), i]));
+  const mergedById = { ...currentById };
+
+  Object.entries(fbItems).forEach(([idStr, fbItem]) => {
+    if (!fbItem) { delete mergedById[idStr]; return; }
+    const current = mergedById[idStr];
+    const isProtected = now - (recentlyEdited.get(idStr) || 0) < 8000;
+
+    if (!current) {
+      // Nieuw item van collega
+      const numId = Number(idStr);
+      mergedById[idStr] = {
+        id: isNaN(numId) ? idStr : numId,
+        time: "00:00", timeBerekend: "00:00",
+        type: fbItem.type || "tekst",
+        what: fbItem.what || "Item",
+        who: fbItem.who || [],
+        extra: fbItem.extra || {},
+        uur: fbItem.uur || 1,
+        duurGeplandSec: fbItem.duurWerkelijkSec || 60,
+        duurWerkelijkSec: fbItem.duurWerkelijkSec || 60,
+        spotifyUri: fbItem.spotifyUri || null,
+      };
+    } else if (!isProtected) {
+      // Update alleen als niet recent lokaal bewerkt
+      mergedById[idStr] = {
+        ...current,
+        extra: fbItem.extra ?? current.extra,
+        duurWerkelijkSec: fbItem.duurWerkelijkSec ?? current.duurWerkelijkSec,
+        spotifyUri: fbItem.spotifyUri !== undefined ? fbItem.spotifyUri : current.spotifyUri,
+        type: fbItem.type || current.type,
+        what: fbItem.what || current.what,
+        who: fbItem.who || current.who,
+        uur: fbItem.uur || current.uur,
+      };
+    }
+  });
+
+  // Verwijder custom items die in Firebase zijn verwijderd
+  Object.keys(currentById).forEach(idStr => {
+    const id = Number(idStr) || idStr;
+    if (!(idStr in fbItems) && !BASE_IDS.has(id)) {
+      delete mergedById[idStr];
+    }
+  });
+
+  // Volgorde uit Firebase toepassen
+  const fbOrderStrs = (Array.isArray(fbOrder) ? fbOrder : Object.values(fbOrder)).map(String);
+  let ordered;
+  if (fbOrderStrs.length > 0) {
+    ordered = [
+      ...fbOrderStrs.map(id => mergedById[id]).filter(Boolean),
+      ...Object.values(mergedById).filter(i => !fbOrderStrs.includes(String(i.id)))
+    ];
+  } else {
+    ordered = [
+      ...currentRundown.map(i => mergedById[String(i.id)]).filter(Boolean),
+      ...Object.values(mergedById).filter(i => !currentRundown.find(c => String(c.id) === String(i.id)))
+    ];
+  }
+
+  return herbereken(ordered, startTijd);
+}
+
 function useDebounce(value, delay) {
   const [dv, setDv] = useState(value);
   useEffect(() => { const t = setTimeout(()=>setDv(value), delay); return ()=>clearTimeout(t); }, [value, delay]);
@@ -328,7 +418,7 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
                 </>
               ) : (
                 <div style={{fontSize:13,color:T.textMuted}}>
-                  {API_KLAAR ? "⏳ Uitzendingen worden geladen…" : "Nog geen uitzendingen. Maak er een aan om te beginnen."}
+                  {DB_KLAAR ? "⏳ Uitzendingen worden geladen…" : "Firebase niet geconfigureerd."}
                 </div>
               )}
             </div>
@@ -1004,6 +1094,10 @@ function TimelinePanel({ items, uur, onReorder, onDeleteVraag, onDeleteBevestig,
 // ════════════════════════════════════════════════════════════
 //  HOOFDAPP
 // ════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════
+//  HOOFDAPP
+// ════════════════════════════════════════════════════════════
 export default function App() {
   const [uitzendingen, setUitzendingen] = useState([]);
   const [actieveUitzending, setActieveUitzending] = useState(null);
@@ -1016,160 +1110,176 @@ export default function App() {
   const [useSim, setUseSim] = useState(true);
   const [zoekOpen, setZoekOpen] = useState(false);
   const [zoekId, setZoekId] = useState(null);
-
-  const [syncStatus, setSyncStatus] = useState(API_KLAAR ? "laden" : "lokaal");
+  const [syncStatus, setSyncStatus] = useState("laden");
   const [highlightId, setHighlightId] = useState(null);
   const [bevestigUurVerwijder, setBevestigUurVerwijder] = useState(false);
   const [verwijderBevestigId, setVerwijderBevestigId] = useState(null);
   const [herstelbaarItem, setHerstelbaarItem] = useState(null);
+  const [uitzendingLoadFout, setUitzendingLoadFout] = useState(false);
   const herstelTimer = useRef(null);
   const itemRefs = useRef({});
+
+  // Firebase sync refs
+  const lastSyncedRef = useRef(null);      // canonical JSON van huidige Firebase-staat
+  const listenerRef = useRef(null);         // Firebase unsubscribe functie
+  const recentlyEdited = useRef(new Map()); // id → timestamp (beschermt lokale edits 8s)
+  const currentRundownRef = useRef([]);     // altijd actuele rundown voor onValue callback
 
   const startTijd = cleanTime(actieveUitzending?.startTijd || "12:00");
   const eindTijd = cleanTime(actieveUitzending?.eindTijd || "14:00");
   const aantalUren = actieveUitzending?.aantalUren || 2;
-
   const isUurTab = tab.startsWith("uur_");
   const tabUur = isUurTab ? parseInt(tab.split("_")[1]) : 0;
 
-  const pendingSave = useRef(false);
-  const saveLock    = useRef(false);
-  const saveQueue   = useRef(null);
-  const lastLoadedRundown = useRef(null);
+  // Houd currentRundownRef in sync met state
+  useEffect(() => { currentRundownRef.current = rundown; }, [rundown]);
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
-  useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
-
-  const [uitzendingLoadFout, setUitzendingLoadFout] = useState(false);
-
+  // ─── Uitzendingen laden ───────────────────────────────────
   function laadUitzendingen() {
     setUitzendingLoadFout(false);
-    setSyncStatus("laden");
-    if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
-    sheetGet("getUitzendingen","").then(res=>{
-      if (res?.ok && res.data?.length) {
-        setUitzendingen(res.data);
-        setSyncStatus("ok");
-        const urlId = new URLSearchParams(window.location.search).get('id');
-        if (urlId) {
-          const gevonden = res.data.find(u => String(u.id) === String(urlId));
-          if (gevonden) handleSelectUitzending(gevonden);
-        }
-      } else {
-        setSyncStatus("fout");
-        setUitzendingLoadFout(true);
+    get(dbRef(db, "uitzendingen")).then(snap => {
+      if (snap.exists()) {
+        const data = snap.val();
+        const list = Object.values(data).sort((a, b) => a.aangemaakt > b.aangemaakt ? 1 : -1);
+        setUitzendingen(list);
       }
-    });
+      setSyncStatus("ok");
+    }).catch(() => { setSyncStatus("fout"); setUitzendingLoadFout(true); });
   }
 
-  useEffect(()=>{ laadUitzendingen(); },[]);
+  useEffect(() => { laadUitzendingen(); }, []);
 
-  useEffect(()=>{
+  // Auto-select via URL-parameter
+  useEffect(() => {
+    if (!uitzendingen.length) return;
+    const urlId = new URLSearchParams(window.location.search).get('id');
+    if (urlId && !actieveUitzending) {
+      const gevonden = uitzendingen.find(u => String(u.id) === String(urlId));
+      if (gevonden) handleSelectUitzending(gevonden);
+    }
+  }, [uitzendingen]);
+
+  // ─── Rundown laden + real-time luisteren ─────────────────
+  useEffect(() => {
     if (!actieveUitzending) return;
+
+    // Cleanup vorige listener
+    if (listenerRef.current) { listenerRef.current(); listenerRef.current = null; }
+    lastSyncedRef.current = null;
+    recentlyEdited.current.clear();
+
+    // Bouw basis-rundown
     const n = actieveUitzending.aantalUren || 2;
     let base = buildBase(startTijd);
     for (let u = 3; u <= n; u++) base = [...base, ...buildUurBase(u, startTijd)];
     const baseBerekend = herbereken(base, startTijd);
     setRundown(baseBerekend);
     setSyncStatus("laden");
-    if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
-    sheetGet("getRundown", actieveUitzending.id).then(res=>{
-      if (res?.ok) {
-        const savedData = res.data || {};
-        const withData = herbereken(baseBerekend.map(item=>{
-          const saved = savedData[item.id] || savedData[String(item.id)];
-          if (!saved) return item;
-          const extra = saved.extra || saved;
-          return { ...item,
-            extra:{...item.extra,...extra},
-            duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec,
-            spotifyUri:saved.spotifyUri||extra.spotifyUri||item.spotifyUri };
-        }), startTijd);
 
-        const ids = res.data?.["_order_"]?.extra?.ids;
-        let loadedRundown;
-        if (!ids?.length) {
-          loadedRundown = withData;
-        } else {
-          const map = Object.fromEntries(withData.map(i=>[String(i.id),i]));
-          const inOrder = ids.map(id=>{
-            const existing = map[String(id)];
-            if (existing) return existing;
-            const s = savedData[String(id)];
-            if (s?.type) return {
-              id: Number(id)||id, type:s.type, what:s.what||s.type,
-              who:s.who||[], uur:s.uur||1, extra:s.extra||{},
-              duurGeplandSec:s.duurWerkelijkSec||180,
-              duurWerkelijkSec:s.duurWerkelijkSec||180, spotifyUri:s.spotifyUri||null,
-            };
-            return null;
-          }).filter(Boolean);
-          loadedRundown = herbereken(inOrder, startTijd);
-        }
+    // Subscribe — eerste aanroep = initieel laden, daarna = real-time updates
+    const runRef = dbRef(db, `rundowns/${actieveUitzending.id}`);
+    let isFirst = true;
 
-        setRundown(loadedRundown);
-        lastLoadedRundown.current = JSON.stringify(loadedRundown);
-        setSyncStatus("ok");
-      } else setSyncStatus("fout");
-    });
-  },[actieveUitzending]);
+    const unsub = onValue(runRef, (snap) => {
+      const fbData = snap.exists() ? snap.val() : null;
+      const baseVoorMerge = isFirst ? baseBerekend : currentRundownRef.current;
+      isFirst = false;
 
+      if (!fbData) {
+        lastSyncedRef.current = toSyncKey(baseBerekend);
+        setSyncStatus("live");
+        return;
+      }
+
+      const merged = applyFirebaseData(baseVoorMerge, fbData, startTijd, recentlyEdited.current);
+      const mergedKey = toSyncKey(merged);
+
+      if (mergedKey === lastSyncedRef.current) { setSyncStatus("live"); return; }
+
+      lastSyncedRef.current = mergedKey;
+      setRundown(merged);
+      setSyncStatus("live");
+    }, () => setSyncStatus("fout"));
+
+    listenerRef.current = unsub;
+    return () => { unsub(); listenerRef.current = null; };
+  }, [actieveUitzending]);
+
+  // ─── Debounce → Firebase per-item schrijven ───────────────
   const debouncedRundown = useDebounce(rundown, 1500);
 
-  function slaOp(rd) {
-    if (!API_KLAAR || !actieveUitzending) return;
-    if (saveLock.current) { saveQueue.current = rd; return; }
-    saveLock.current = true;
-    setSyncStatus("opslaan");
-    pendingSave.current = true;
+  useEffect(() => {
+    if (!actieveUitzending) return;
+    if (lastSyncedRef.current === null) return; // nog niet geladen
 
-    sheetPost({
-      action: "saveRundown",
-      uitzendingId: actieveUitzending.id,
-      data: {
-        order: rd.map(i => i.id),
-        items: rd.map(i => ({
-          id: i.id, extra: i.extra,
-          duurWerkelijkSec: i.duurWerkelijkSec,
-          spotifyUri: i.spotifyUri,
-          type: i.type, what: i.what, who: i.who, uur: i.uur,
-        }))
+    const currentKey = toSyncKey(debouncedRundown);
+    if (currentKey === lastSyncedRef.current) return; // niets veranderd
+
+    // Bereken welke items veranderd zijn t.o.v. Firebase
+    let prevItems = [], prevOrder = [];
+    try {
+      const prev = JSON.parse(lastSyncedRef.current);
+      prevItems = prev.items || [];
+      prevOrder = prev.order || [];
+    } catch(e) {}
+
+    const prevById = Object.fromEntries(prevItems.map(i => {
+      const { id, ...rest } = i;
+      return [String(id), rest];
+    }));
+
+    const paths = {};
+    const base = `rundowns/${actieveUitzending.id}`;
+
+    // Gewijzigde en nieuwe items
+    debouncedRundown.forEach(item => {
+      const fbFmt = itemToFb(item);
+      const prevFmt = prevById[String(item.id)];
+      if (!prevFmt || JSON.stringify(fbFmt) !== JSON.stringify(prevFmt)) {
+        paths[`${base}/items/${item.id}`] = fbFmt;
       }
-    }).then(res => {
-      const ok = !!res?.ok;
-      setSyncStatus(ok ? "ok" : "fout");
-      if (ok) lastLoadedRundown.current = JSON.stringify(rd);
-      pendingSave.current = false;
-      saveLock.current = false;
-      if (saveQueue.current) { const next = saveQueue.current; saveQueue.current = null; slaOp(next); }
     });
-  }
 
-  useEffect(()=>{
-    if (!API_KLAAR || !actieveUitzending) return;
-    if (lastLoadedRundown.current === null) return;
-    const current = JSON.stringify(debouncedRundown);
-    if (current === lastLoadedRundown.current) return;
-    slaOp(debouncedRundown);
-  },[debouncedRundown]);
+    // Verwijderde items (null = verwijder in Firebase)
+    const currentIds = new Set(debouncedRundown.map(i => String(i.id)));
+    prevItems.forEach(pi => {
+      if (!currentIds.has(String(pi.id))) paths[`${base}/items/${pi.id}`] = null;
+    });
 
-  useEffect(()=>{
-    const handler = (e) => {
-      if (syncStatus==="opslaan"||pendingSave.current) { e.preventDefault(); e.returnValue = ""; }
-    };
-    window.addEventListener("beforeunload", handler);
-    return ()=>window.removeEventListener("beforeunload", handler);
-  },[syncStatus]);
+    // Volgorde als die veranderd is
+    const currentOrder = debouncedRundown.map(i => String(i.id));
+    if (JSON.stringify(currentOrder) !== JSON.stringify(prevOrder)) {
+      paths[`${base}/order`] = debouncedRundown.map(i => i.id);
+    }
 
+    if (Object.keys(paths).length === 0) {
+      lastSyncedRef.current = currentKey;
+      return;
+    }
+
+    setSyncStatus("opslaan");
+    lastSyncedRef.current = currentKey; // optimistisch
+
+    update(dbRef(db), paths)
+      .then(() => setSyncStatus("live"))
+      .catch(() => { setSyncStatus("fout"); lastSyncedRef.current = null; });
+
+  }, [debouncedRundown]);
+
+  // ─── CRUD uitzendingen ────────────────────────────────────
   async function handleCreate(data) {
     const id = "uitz_" + Date.now();
-    const nieuw = { id, ...data, aantalUren: 2 };
-    if (API_KLAAR) await sheetPost({ action:"createUitzending", uitzendingId:"", data:nieuw });
-    setUitzendingen(prev=>[...prev, nieuw]);
+    const nieuw = { id, ...data, aantalUren: 2, aangemaakt: new Date().toISOString() };
+    await set(dbRef(db, `uitzendingen/${id}`), nieuw);
+    setUitzendingen(prev => [...prev, nieuw]);
     handleSelectUitzending(nieuw);
   }
 
   function handleSelectUitzending(u) {
-    lastLoadedRundown.current = null;
+    if (listenerRef.current) { listenerRef.current(); listenerRef.current = null; }
+    lastSyncedRef.current = null;
+    recentlyEdited.current.clear();
     setActieveUitzending(u);
     setSimTime(cleanTime(u.startTijd || "12:00"));
     setShowUitzendingModal(false);
@@ -1177,21 +1287,18 @@ export default function App() {
     window.history.pushState({}, '', `?id=${u.id}`);
   }
 
-  function handleRenameUitzending(id, nieuweNaam) {
-    setUitzendingen(prev => prev.map(u => u.id === id ? { ...u, naam: nieuweNaam } : u));
-    if (actieveUitzending?.id === id) setActieveUitzending(prev => ({ ...prev, naam: nieuweNaam }));
-    if (API_KLAAR) sheetPost({ action:"updateUitzendingMeta", uitzendingId:id, data:{ naam: nieuweNaam } });
-  }
-
-  function handleDeleteUitzending(id) {
+  async function handleDeleteUitzending(id) {
     setUitzendingen(prev => prev.filter(u => u.id !== id));
     if (actieveUitzending?.id === id) {
+      if (listenerRef.current) { listenerRef.current(); listenerRef.current = null; }
       setActieveUitzending(null);
       setRundown([]);
       setShowUitzendingModal(true);
       window.history.pushState({}, '', window.location.pathname);
     }
-    if (API_KLAAR) sheetPost({ action:"deleteUitzending", uitzendingId:id, data:{} });
+    await remove(dbRef(db, `uitzendingen/${id}`));
+    await remove(dbRef(db, `rundowns/${id}`));
+    await remove(dbRef(db, `redactie/${id}`));
   }
 
   async function handleCopyUitzending(bronId, { datum, naam, startTijd: nieuweStart, eindTijd: nieuwEind }) {
@@ -1202,12 +1309,23 @@ export default function App() {
       id: nieuwId, datum,
       naam: naam || `Kopie van ${formatUitzendingNaam(bron)}`,
       startTijd: nieuweStart || bron.startTijd || "12:00",
-      eindTijd:  nieuwEind  || bron.eindTijd  || "14:00",
+      eindTijd: nieuwEind || bron.eindTijd || "14:00",
       aantalUren: bron.aantalUren || 2,
+      aangemaakt: new Date().toISOString(),
     };
-    if (API_KLAAR) await sheetPost({ action:"copyUitzending", uitzendingId:bronId, data:kopiee });
+    await set(dbRef(db, `uitzendingen/${nieuwId}`), kopiee);
+    const bronSnap = await get(dbRef(db, `rundowns/${bronId}`));
+    if (bronSnap.exists()) await set(dbRef(db, `rundowns/${nieuwId}`), bronSnap.val());
+    const redSnap = await get(dbRef(db, `redactie/${bronId}`));
+    if (redSnap.exists()) await set(dbRef(db, `redactie/${nieuwId}`), redSnap.val());
     setUitzendingen(prev => [...prev, kopiee]);
     handleSelectUitzending(kopiee);
+  }
+
+  function handleRenameUitzending(id, nieuweNaam) {
+    setUitzendingen(prev => prev.map(u => u.id === id ? { ...u, naam: nieuweNaam } : u));
+    if (actieveUitzending?.id === id) setActieveUitzending(prev => ({ ...prev, naam: nieuweNaam }));
+    update(dbRef(db, `uitzendingen/${id}`), { naam: nieuweNaam });
   }
 
   function handleVoegUurToe() {
@@ -1218,7 +1336,7 @@ export default function App() {
     const updated = { ...actieveUitzending, aantalUren: nieuweUur };
     setActieveUitzending(updated);
     setUitzendingen(prev => prev.map(u => u.id === updated.id ? updated : u));
-    if (API_KLAAR) sheetPost({ action:"updateUitzendingMeta", uitzendingId:actieveUitzending.id, data:{ aantalUren: nieuweUur } });
+    update(dbRef(db, `uitzendingen/${actieveUitzending.id}`), { aantalUren: nieuweUur });
     setTab(`uur_${nieuweUur}`);
   }
 
@@ -1229,44 +1347,39 @@ export default function App() {
 
   function handleVerwijderLaatsteUurBevestig() {
     const uurToRemove = aantalUren;
-    const nieuwRundown = herbereken(rundown.filter(i => i.uur !== uurToRemove), startTijd);
-    setRundown(nieuwRundown);
+    setRundown(herbereken(rundown.filter(i => i.uur !== uurToRemove), startTijd));
     const nieuweAantal = aantalUren - 1;
     const updated = { ...actieveUitzending, aantalUren: nieuweAantal };
     setActieveUitzending(updated);
     setUitzendingen(prev => prev.map(u => u.id === updated.id ? updated : u));
-    if (API_KLAAR) sheetPost({ action:"updateUitzendingMeta", uitzendingId:actieveUitzending.id, data:{ aantalUren: nieuweAantal } });
+    update(dbRef(db, `uitzendingen/${actieveUitzending.id}`), { aantalUren: nieuweAantal });
     if (tab === `uur_${uurToRemove}`) setTab(`uur_${nieuweAantal}`);
     setBevestigUurVerwijder(false);
   }
 
-  const curStr = useSim ? simTime : `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
-  const curSec = timeToSec(curStr);
-  const startSec = timeToSec(startTijd);
-
-  function uurStartSec(u) { return startSec + (u - 1) * 3600; }
-  function uurLabel(u) { return `${addSec(startTijd,(u-1)*3600)} – ${addSec(startTijd,u*3600)}`; }
-  function pct(u) { return Math.min(100,Math.max(0,((curSec - uurStartSec(u)) / 3600) * 100)); }
-
-  function getActiveId(u) {
-    let active=null;
-    rundown.filter(i=>i.uur===u).forEach(item=>{
-      if(timeToSec(item.timeBerekend||item.time)<=curSec) active=item.id;
-    });
-    return active;
+  // ─── Rundown mutaties ─────────────────────────────────────
+  function handleUpdate(id, newExtra) {
+    recentlyEdited.current.set(String(id), Date.now());
+    setRundown(prev => prev.map(r => r.id === id ? { ...r, extra: newExtra } : r));
   }
 
-  function handleUpdate(id, newExtra) { setRundown(prev=>prev.map(r=>r.id===id?{...r,extra:newExtra}:r)); }
   function handleRename(id, newWhat) {
-    setRundown(prev=>prev.map(r=>r.id===id?{...r,what:newWhat,extra:{...r.extra,_naam:newWhat}}:r));
+    recentlyEdited.current.set(String(id), Date.now());
+    setRundown(prev => prev.map(r => r.id === id ? { ...r, what: newWhat, extra: { ...r.extra, _naam: newWhat } } : r));
   }
-  function handleDuurChange(id, sec) { setRundown(prev=>herbereken(prev.map(r=>r.id===id?{...r,duurWerkelijkSec:sec}:r),startTijd)); }
+
+  function handleDuurChange(id, sec) {
+    recentlyEdited.current.set(String(id), Date.now());
+    setRundown(prev => herbereken(prev.map(r => r.id === id ? { ...r, duurWerkelijkSec: sec } : r), startTijd));
+  }
+
   function handleTrackSelect(track) {
     if (!zoekId) return;
-    setRundown(prev=>herbereken(prev.map(r=>r.id===zoekId?{
-      ...r, duurWerkelijkSec:track.duurSec||r.duurWerkelijkSec, spotifyUri:track.uri,
-      extra:{...r.extra,artiest:track.artiest||r.extra.artiest,nummer:track.nummer||r.extra.nummer},
-    }:r),startTijd));
+    recentlyEdited.current.set(String(zoekId), Date.now());
+    setRundown(prev => herbereken(prev.map(r => r.id === zoekId ? {
+      ...r, duurWerkelijkSec: track.duurSec || r.duurWerkelijkSec, spotifyUri: track.uri,
+      extra: { ...r.extra, artiest: track.artiest || r.extra.artiest, nummer: track.nummer || r.extra.nummer },
+    } : r), startTijd));
   }
 
   function handleDeleteVraag(id) { setVerwijderBevestigId(id); }
@@ -1286,10 +1399,10 @@ export default function App() {
   function handleHerstel() {
     if (!herstelbaarItem) return;
     if (herstelTimer.current) clearTimeout(herstelTimer.current);
+    recentlyEdited.current.set(String(herstelbaarItem.item.id), Date.now());
     setRundown(prev => {
       const items = [...prev];
-      const insertAt = Math.min(herstelbaarItem.idx, items.length);
-      items.splice(insertAt, 0, herstelbaarItem.item);
+      items.splice(Math.min(herstelbaarItem.idx, items.length), 0, herstelbaarItem.item);
       return herbereken(items, startTijd);
     });
     setHerstelbaarItem(null);
@@ -1300,166 +1413,83 @@ export default function App() {
   function scrollToItem(id) {
     setHighlightId(id);
     const el = itemRefs.current[id];
-    if (el) el.scrollIntoView({ behavior:"smooth", block:"center" });
-    setTimeout(()=>setHighlightId(null), 2000);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => setHighlightId(null), 2000);
   }
 
-  function printRundown() {
-    const uitz = actieveUitzending;
-    if (!uitz) return;
-
-    function tekst(blok) {
-      const e = blok.extra || {};
-      const regels = [];
-      if (blok.type === "muziek") {
-        if (e.artiest || e.nummer) regels.push(`<div class="muziek-titel">${[e.artiest, e.nummer].filter(Boolean).join(' — ')}</div>`);
-        if (e.feitje) regels.push(`<div class="veld"><span class="label">Feitje</span><p>${e.feitje}</p></div>`);
-      }
-      if (blok.type === "tekst") {
-        if (e.tekst) regels.push(`<div class="veld"><p>${e.tekst.replace(/\n/g,'<br>')}</p></div>`);
-      }
-      if (blok.type === "nieuws") {
-        if (e.intro) regels.push(`<div class="veld"><span class="label">Intro</span><p>${e.intro.replace(/\n/g,'<br>')}</p></div>`);
-        if (e.berichten) regels.push(`<div class="veld"><span class="label">Berichten</span><p>${e.berichten.replace(/\n/g,'<br>')}</p></div>`);
-      }
-      if (blok.type === "interview") {
-        const gastregel = [e.wie, e.functie].filter(Boolean).join(', ');
-        if (gastregel) regels.push(`<div class="veld"><span class="label">Gast</span><p>${gastregel}${e.type?' ('+e.type+')':''}${e.tel?' · '+e.tel:''}</p></div>`);
-        if (e.onderwerp) regels.push(`<div class="veld"><span class="label">Onderwerp</span><p>${e.onderwerp}</p></div>`);
-        if (e.intro) regels.push(`<div class="veld"><span class="label">Introductietekst</span><p>${e.intro.replace(/\n/g,'<br>')}</p></div>`);
-        if (e.vragen) regels.push(`<div class="veld"><span class="label">Interviewvragen</span><p>${e.vragen.replace(/\n/g,'<br>')}</p></div>`);
-      }
-      if (blok.type === "special") {
-        if (e.tekst) regels.push(`<div class="veld"><p>${e.tekst.replace(/\n/g,'<br>')}</p></div>`);
-        if (e.verhaal) regels.push(`<div class="veld"><span class="label">Verhaal</span><p>${e.verhaal.replace(/\n/g,'<br>')}</p></div>`);
-        if (e.lp_naam || e.artiest) regels.push(`<div class="veld"><span class="label">LP</span><p>${[e.lp_naam, e.artiest].filter(Boolean).join(' — ')}</p></div>`);
-        if (e.omschrijving) regels.push(`<div class="veld"><span class="label">Omschrijving</span><p>${e.omschrijving.replace(/\n/g,'<br>')}</p></div>`);
-        if (e.link) regels.push(`<div class="veld"><span class="label">Link</span><p>${e.link}</p></div>`);
-      }
-      if (blok.type === "jingle") {
-        regels.push(`<div class="jingle-label">${e.label || blok.what}</div>`);
-      }
-      return regels.join('');
-    }
-
-    const typeKleur = { muziek:"#1565C0", jingle:"#C62828", tekst:"#CC00BB", nieuws:"#2E7D32", interview:"#E64A19", special:"#00796B" };
-    const typeLabel = { muziek:"MUZIEK", jingle:"JINGLE", tekst:"TEKST", nieuws:"NIEUWS", interview:"INTERVIEW", special:"SPECIAL" };
-
-    const uren = [...new Set(rundown.map(i=>i.uur))].sort((a,b)=>a-b);
-
-    const html = `<!DOCTYPE html>
-<html lang="nl">
-<head>
-<meta charset="UTF-8">
-<title>Draaiboek — ${formatUitzendingNaam(uitz)}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Georgia', serif; font-size: 11pt; color: #111; background: #fff; }
-  .header { padding: 24px 32px 16px; border-bottom: 3px solid #111; margin-bottom: 24px; }
-  .header h1 { font-size: 22pt; font-weight: bold; letter-spacing: -0.5px; }
-  .header .meta { font-size: 10pt; color: #555; margin-top: 6px; font-family: 'Arial', sans-serif; }
-  .uur-header { font-family: 'Arial', sans-serif; font-size: 9pt; font-weight: bold; letter-spacing: 3px; text-transform: uppercase; color: #888; padding: 0 32px; margin: 24px 0 8px; }
-  .blok { display: flex; gap: 0; padding: 10px 32px; border-bottom: 1px solid #e8e8e8; page-break-inside: avoid; }
-  .blok:last-child { border-bottom: none; }
-  .blok-tijd { width: 52px; flex-shrink: 0; padding-top: 2px; }
-  .blok-tijd .tijd { font-family: 'Courier New', monospace; font-size: 10pt; font-weight: bold; color: #111; }
-  .blok-tijd .duur { font-family: 'Courier New', monospace; font-size: 8pt; color: #888; margin-top: 2px; }
-  .blok-balk { width: 3px; flex-shrink: 0; margin: 0 12px; border-radius: 2px; }
-  .blok-inhoud { flex: 1; }
-  .blok-kop { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
-  .type-badge { font-family: 'Arial', sans-serif; font-size: 7pt; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; }
-  .blok-naam { font-family: 'Arial', sans-serif; font-size: 11pt; font-weight: bold; color: #111; }
-  .veld { margin-top: 5px; }
-  .veld .label { font-family: 'Arial', sans-serif; font-size: 8pt; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; color: #888; display: block; margin-bottom: 2px; }
-  .veld p { font-size: 11pt; line-height: 1.65; color: #222; white-space: pre-wrap; }
-  .muziek-titel { font-family: 'Arial', sans-serif; font-size: 12pt; font-weight: bold; color: #1565C0; margin-bottom: 4px; }
-  .jingle-label { font-family: 'Arial', sans-serif; font-size: 10pt; color: #888; font-style: italic; }
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .blok { page-break-inside: avoid; }
-    .uur-sectie { page-break-before: auto; }
-  }
-</style>
-</head>
-<body>
-<div class="header">
-  <h1>${formatUitzendingNaam(uitz)}</h1>
-  <div class="meta">${formatDatum(uitz.datum)} · ${cleanTime(uitz.startTijd||'12:00')} – ${cleanTime(uitz.eindTijd||'14:00')} · ${aantalUren} uur</div>
-</div>
-${uren.map(uur => {
-  const items = rundown.filter(i=>i.uur===uur);
-  return `<div class="uur-sectie">
-<div class="uur-header">Uur ${uur} — ${addSec(startTijd,(uur-1)*3600)} tot ${addSec(startTijd,uur*3600)}</div>
-${items.map(item => {
-  const kleur = typeKleur[item.type] || '#555';
-  const inhoud = tekst(item);
-  return `<div class="blok">
-  <div class="blok-tijd">
-    <div class="tijd">${item.timeBerekend||item.time}</div>
-    <div class="duur">${toMMSS(item.duurWerkelijkSec)}</div>
-  </div>
-  <div class="blok-balk" style="background:${kleur}"></div>
-  <div class="blok-inhoud">
-    <div class="blok-kop">
-      <span class="type-badge" style="background:${kleur}18;color:${kleur}">${typeLabel[item.type]||item.type.toUpperCase()}</span>
-      <span class="blok-naam">${item.extra._naam||item.what}</span>
-    </div>
-    ${inhoud}
-  </div>
-</div>`;
-}).join('')}
-</div>`;
-}).join('')}
-<script>window.onload=()=>window.print();</script>
-</body>
-</html>`;
-
-    const w = window.open('', '_blank');
-    w.document.write(html);
-    w.document.close();
-  }
-
-  function handleAddItem(uur, type, positie="einde") {
+  function handleAddItem(uur, type, positie = "einde") {
     const typeDefaults = {
       muziek:    { dur:180, extra:{artiest:"",nummer:"",feitje:""}, who:["Techniek","Muziekredactie"] },
       tekst:     { dur:60,  extra:{tekst:""},                       who:["Host"] },
       nieuws:    { dur:300, extra:{intro:"",berichten:""},           who:["Nieuwsredactie"] },
-      interview: { dur:300, extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""},who:["Host"] },
+      interview: { dur:300, extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""}, who:["Host"] },
       jingle:    { dur:5,   extra:{label:"Jingle"},                  who:["Techniek"] },
       special:   { dur:120, extra:{tekst:""},                        who:["Host"] },
     };
     const def = typeDefaults[type] || typeDefaults.tekst;
+    const newId = Date.now();
+    recentlyEdited.current.set(String(newId), Date.now());
     const newItem = {
-      id: Date.now(), time: "00:00", type,
+      id: newId, time: "00:00", type,
       what: type.charAt(0).toUpperCase() + type.slice(1),
       who: def.who, extra: def.extra, uur,
       duurGeplandSec: def.dur, duurWerkelijkSec: def.dur, spotifyUri: null,
     };
     setRundown(prev => {
       const items = [...prev];
-      const uurItems = items.filter(i=>i.uur===uur);
+      const uurItems = items.filter(i => i.uur === uur);
       const insertAfterIdx = positie === "einde"
-        ? items.lastIndexOf(uurItems[uurItems.length-1])
+        ? items.lastIndexOf(uurItems[uurItems.length - 1])
         : items.indexOf(uurItems[positie]);
-      items.splice(insertAfterIdx+1, 0, newItem);
+      items.splice(insertAfterIdx + 1, 0, newItem);
       return herbereken(items, startTijd);
     });
   }
 
-  const uurTabs = Array.from({length: aantalUren}, (_, i) => ({
-    id: `uur_${i+1}`, l: `UUR ${i+1}`, s: uurLabel(i+1),
-  }));
-  const allTabs = [...uurTabs, { id:"redactie", l:"REDACTIE", s:"" }];
+  // ─── Print ───────────────────────────────────────────────
+  function printRundown() {
+    const uitz = actieveUitzending;
+    if (!uitz) return;
+    function tekst(blok) {
+      const e = blok.extra || {};
+      const regels = [];
+      if (blok.type==="muziek") { if(e.artiest||e.nummer) regels.push(`<div class="muziek-titel">${[e.artiest,e.nummer].filter(Boolean).join(' — ')}</div>`); if(e.feitje) regels.push(`<div class="veld"><span class="label">Feitje</span><p>${e.feitje}</p></div>`); }
+      if (blok.type==="tekst") { if(e.tekst) regels.push(`<div class="veld"><p>${e.tekst.replace(/\n/g,'<br>')}</p></div>`); }
+      if (blok.type==="nieuws") { if(e.intro) regels.push(`<div class="veld"><span class="label">Intro</span><p>${e.intro.replace(/\n/g,'<br>')}</p></div>`); if(e.berichten) regels.push(`<div class="veld"><span class="label">Berichten</span><p>${e.berichten.replace(/\n/g,'<br>')}</p></div>`); }
+      if (blok.type==="interview") { const gr=[e.wie,e.functie].filter(Boolean).join(', '); if(gr) regels.push(`<div class="veld"><span class="label">Gast</span><p>${gr}${e.type?' ('+e.type+')':''}${e.tel?' · '+e.tel:''}</p></div>`); if(e.onderwerp) regels.push(`<div class="veld"><span class="label">Onderwerp</span><p>${e.onderwerp}</p></div>`); if(e.intro) regels.push(`<div class="veld"><span class="label">Introductietekst</span><p>${e.intro.replace(/\n/g,'<br>')}</p></div>`); if(e.vragen) regels.push(`<div class="veld"><span class="label">Interviewvragen</span><p>${e.vragen.replace(/\n/g,'<br>')}</p></div>`); }
+      if (blok.type==="special") { if(e.tekst) regels.push(`<div class="veld"><p>${e.tekst.replace(/\n/g,'<br>')}</p></div>`); if(e.verhaal) regels.push(`<div class="veld"><span class="label">Verhaal</span><p>${e.verhaal.replace(/\n/g,'<br>')}</p></div>`); if(e.lp_naam||e.artiest) regels.push(`<div class="veld"><span class="label">LP</span><p>${[e.lp_naam,e.artiest].filter(Boolean).join(' — ')}</p></div>`); if(e.omschrijving) regels.push(`<div class="veld"><span class="label">Omschrijving</span><p>${e.omschrijving.replace(/\n/g,'<br>')}</p></div>`); if(e.link) regels.push(`<div class="veld"><span class="label">Link</span><p>${e.link}</p></div>`); }
+      if (blok.type==="jingle") regels.push(`<div class="jingle-label">${e.label||blok.what}</div>`);
+      return regels.join('');
+    }
+    const typeKleur={muziek:"#1565C0",jingle:"#C62828",tekst:"#CC00BB",nieuws:"#2E7D32",interview:"#E64A19",special:"#00796B"};
+    const typeLabel={muziek:"MUZIEK",jingle:"JINGLE",tekst:"TEKST",nieuws:"NIEUWS",interview:"INTERVIEW",special:"SPECIAL"};
+    const uren=[...new Set(rundown.map(i=>i.uur))].sort((a,b)=>a-b);
+    const html=`<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>Draaiboek — ${formatUitzendingNaam(uitz)}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Georgia',serif;font-size:11pt;color:#111;background:#fff}.header{padding:24px 32px 16px;border-bottom:3px solid #111;margin-bottom:24px}.header h1{font-size:22pt;font-weight:bold}.header .meta{font-size:10pt;color:#555;margin-top:6px;font-family:'Arial',sans-serif}.uur-header{font-family:'Arial',sans-serif;font-size:9pt;font-weight:bold;letter-spacing:3px;text-transform:uppercase;color:#888;padding:0 32px;margin:24px 0 8px}.blok{display:flex;gap:0;padding:10px 32px;border-bottom:1px solid #e8e8e8;page-break-inside:avoid}.blok-tijd{width:52px;flex-shrink:0;padding-top:2px}.blok-tijd .tijd{font-family:'Courier New',monospace;font-size:10pt;font-weight:bold;color:#111}.blok-tijd .duur{font-family:'Courier New',monospace;font-size:8pt;color:#888;margin-top:2px}.blok-balk{width:3px;flex-shrink:0;margin:0 12px;border-radius:2px}.blok-inhoud{flex:1}.blok-kop{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}.type-badge{font-family:'Arial',sans-serif;font-size:7pt;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;padding:2px 6px;border-radius:3px}.blok-naam{font-family:'Arial',sans-serif;font-size:11pt;font-weight:bold;color:#111}.veld{margin-top:5px}.veld .label{font-family:'Arial',sans-serif;font-size:8pt;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#888;display:block;margin-bottom:2px}.veld p{font-size:11pt;line-height:1.65;color:#222;white-space:pre-wrap}.muziek-titel{font-family:'Arial',sans-serif;font-size:12pt;font-weight:bold;color:#1565C0;margin-bottom:4px}.jingle-label{font-family:'Arial',sans-serif;font-size:10pt;color:#888;font-style:italic}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="header"><h1>${formatUitzendingNaam(uitz)}</h1><div class="meta">${formatDatum(uitz.datum)} · ${cleanTime(uitz.startTijd||'12:00')} – ${cleanTime(uitz.eindTijd||'14:00')} · ${aantalUren} uur</div></div>${uren.map(uur=>`<div class="uur-sectie"><div class="uur-header">Uur ${uur} — ${addSec(startTijd,(uur-1)*3600)} tot ${addSec(startTijd,uur*3600)}</div>${rundown.filter(i=>i.uur===uur).map(item=>{const kleur=typeKleur[item.type]||'#555';const inhoud=tekst(item);return`<div class="blok"><div class="blok-tijd"><div class="tijd">${item.timeBerekend||item.time}</div><div class="duur">${toMMSS(item.duurWerkelijkSec)}</div></div><div class="blok-balk" style="background:${kleur}"></div><div class="blok-inhoud"><div class="blok-kop"><span class="type-badge" style="background:${kleur}18;color:${kleur}">${typeLabel[item.type]||item.type.toUpperCase()}</span><span class="blok-naam">${item.extra._naam||item.what}</span></div>${inhoud}</div></div>`;}).join('')}</div>`).join('')}<script>window.onload=()=>window.print();</script></body></html>`;
+    const w=window.open('','_blank'); w.document.write(html); w.document.close();
+  }
+
+  // ─── Tabs en layout helpers ───────────────────────────────
+  const curStr = useSim ? simTime : `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+  const curSec = timeToSec(curStr);
+  const startSec = timeToSec(startTijd);
+  function uurStartSec(u) { return startSec + (u - 1) * 3600; }
+  function uurLabel(u) { return `${addSec(startTijd,(u-1)*3600)} – ${addSec(startTijd,u*3600)}`; }
+  function pct(u) { return Math.min(100, Math.max(0, ((curSec - uurStartSec(u)) / 3600) * 100)); }
+  function getActiveId(u) {
+    let active = null;
+    rundown.filter(i => i.uur === u).forEach(item => { if (timeToSec(item.timeBerekend||item.time) <= curSec) active = item.id; });
+    return active;
+  }
+
+  const uurTabs = Array.from({ length: aantalUren }, (_, i) => ({ id: `uur_${i+1}`, l: `UUR ${i+1}`, s: uurLabel(i+1) }));
+  const allTabs = [...uurTabs, { id: "redactie", l: "REDACTIE", s: "" }];
   const currentItems = isUurTab ? rundown.filter(i => i.uur === tabUur) : [];
 
   return (
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
       <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23FF00E7'/><text y='72' x='50' text-anchor='middle' font-size='62' font-family='serif'>📻</text></svg>"/>
-      <style>{`
-        input::placeholder, textarea::placeholder { color: #555E6E !important; font-style: italic; }
-        input:not([value=""]), textarea:not(:empty) { color: #1A1D23; }
-      `}</style>
+      <style>{`input::placeholder, textarea::placeholder { color: #555E6E !important; font-style: italic; } input:not([value=""]), textarea:not(:empty) { color: #1A1D23; }`}</style>
 
       {/* Header */}
       <div style={{background:T.bgHeader,borderBottom:`1px solid ${T.border}`,padding:"0 20px",display:"flex",alignItems:"center",height:56,gap:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
@@ -1479,15 +1509,8 @@ ${items.map(item => {
         )}
         <div style={{flex:1}}/>
         <SyncBadge status={syncStatus}/>
-        {actieveUitzending && API_KLAAR && syncStatus!=="lokaal" && (
-          <button onClick={()=>slaOp(rundown)} style={{padding:"4px 10px",fontSize:10,fontWeight:700,borderRadius:4,cursor:"pointer",background:syncStatus==="fout"?"#EF4444":BRAND.paars,color:"#fff",border:"none"}}>
-            💾 Nu opslaan
-          </button>
-        )}
         {actieveUitzending && (
-          <button onClick={printRundown} style={{padding:"4px 10px",fontSize:10,fontWeight:700,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>
-            🖨 Printen
-          </button>
+          <button onClick={printRundown} style={{padding:"4px 10px",fontSize:10,fontWeight:700,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>🖨 Printen</button>
         )}
         <div style={{fontSize:14,color:T.text,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>
           {String(now.getHours()).padStart(2,"0")}:{String(now.getMinutes()).padStart(2,"0")}:{String(now.getSeconds()).padStart(2,"0")}
@@ -1498,25 +1521,18 @@ ${items.map(item => {
       <div style={{background:T.bgHeader,borderBottom:`1px solid ${T.border}`,padding:"6px 20px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
         <span style={{fontSize:10,letterSpacing:1,color:T.textMuted,fontWeight:600,marginRight:4}}>ROL</span>
         {["Eindredactie","Host","Techniek","Nieuwsredactie","Muziekredactie"].map(r=>(
-          <button key={r} onClick={()=>setRole(r)} style={{padding:"4px 12px",borderRadius:20,border:"1px solid",fontSize:11,cursor:"pointer",transition:"all 0.15s",
-            borderColor:role===r?roleColors[r]:T.border,background:role===r?`${roleColors[r]}15`:T.bg,
-            color:role===r?roleColors[r]:"#1A1F2B",fontWeight:role===r?600:500}}>{r}</button>
+          <button key={r} onClick={()=>setRole(r)} style={{padding:"4px 12px",borderRadius:20,border:"1px solid",fontSize:11,cursor:"pointer",transition:"all 0.15s",borderColor:role===r?roleColors[r]:T.border,background:role===r?`${roleColors[r]}15`:T.bg,color:role===r?roleColors[r]:"#1A1F2B",fontWeight:role===r?600:500}}>{r}</button>
         ))}
         <div style={{flex:1}}/>
         <span style={{fontSize:10,color:"#1F2937",letterSpacing:1,fontWeight:500}}>SIM</span>
-        <input type="time" value={simTime} onChange={e=>setSimTime(e.target.value)}
-          style={{background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"3px 8px",fontSize:11,borderRadius:4}}/>
-        <button onClick={()=>setUseSim(s=>!s)} style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,
-          background:useSim?`${BRAND.roze}15`:T.bg,border:`1px solid ${useSim?BRAND.roze:T.border}`,
-          color:useSim?BRAND.roze:"#1F2937"}}>{useSim?"SIM AAN":"SIM UIT"}</button>
+        <input type="time" value={simTime} onChange={e=>setSimTime(e.target.value)} style={{background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"3px 8px",fontSize:11,borderRadius:4}}/>
+        <button onClick={()=>setUseSim(s=>!s)} style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,background:useSim?`${BRAND.roze}15`:T.bg,border:`1px solid ${useSim?BRAND.roze:T.border}`,color:useSim?BRAND.roze:"#1F2937"}}>{useSim?"SIM AAN":"SIM UIT"}</button>
       </div>
 
       <div style={{display:"flex",height:"calc(100vh - 100px)",overflow:"hidden",position:"relative"}}>
         {syncStatus==="laden" && actieveUitzending && (
           <div style={{position:"absolute",inset:0,background:"rgba(255,255,255,0.75)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}>
-            <div style={{background:"#fff",padding:"20px 32px",borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,0.12)",textAlign:"center",fontSize:13,color:T.textMuted,fontWeight:600}}>
-              ⏳ Draaiboek wordt geladen…
-            </div>
+            <div style={{background:"#fff",padding:"20px 32px",borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,0.12)",textAlign:"center",fontSize:13,color:T.textMuted,fontWeight:600}}>⏳ Draaiboek wordt geladen…</div>
           </div>
         )}
 
@@ -1524,40 +1540,29 @@ ${items.map(item => {
         <div style={{width:180,background:T.bgSidebar,borderRight:`1px solid ${T.border}`,flexShrink:0,overflowY:"auto"}}>
           <div style={{paddingTop:8}}>
             {allTabs.map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)} style={{width:"100%",textAlign:"left",padding:"10px 16px",
-                background:tab===t.id?"#F9FAFB":"transparent",border:"none",
-                borderLeft:`3px solid ${tab===t.id?BRAND.roze:"transparent"}`,
-                color:tab===t.id?"#0A0C10":"#1A1F2B",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400}}>
+              <button key={t.id} onClick={()=>setTab(t.id)} style={{width:"100%",textAlign:"left",padding:"10px 16px",background:tab===t.id?"#F9FAFB":"transparent",border:"none",borderLeft:`3px solid ${tab===t.id?BRAND.roze:"transparent"}`,color:tab===t.id?"#0A0C10":"#1A1F2B",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400}}>
                 <div>{t.l}</div>
                 {t.s&&<div style={{fontSize:10,color:T.textLight,marginTop:1}}>{t.s}</div>}
               </button>
             ))}
           </div>
-
           {role==="Eindredactie" && actieveUitzending && (
             <div style={{padding:"10px 12px",borderTop:`1px solid ${T.border}`,marginTop:4,display:"flex",flexDirection:"column",gap:4}}>
               <div style={{fontSize:9,letterSpacing:2,color:T.textLight,marginBottom:4,fontWeight:600,textTransform:"uppercase"}}>Uren</div>
-              <button onClick={handleVoegUurToe} style={{padding:"5px 8px",fontSize:11,background:`${BRAND.roze}10`,border:`1px solid ${BRAND.roze}44`,color:BRAND.roze,borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>
-                + Uur toevoegen
-              </button>
-              {aantalUren > 1 && (
-                bevestigUurVerwijder ? (
-                  <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:4,padding:"6px 8px"}}>
-                    <div style={{fontSize:10,color:"#EF4444",fontWeight:600,marginBottom:5}}>Uur {aantalUren} verwijderen?</div>
-                    <div style={{display:"flex",gap:4}}>
-                      <button onClick={handleVerwijderLaatsteUurBevestig} style={{flex:1,padding:"4px 6px",fontSize:10,background:"#EF4444",border:"none",color:"#fff",borderRadius:3,cursor:"pointer",fontWeight:700}}>Ja</button>
-                      <button onClick={()=>setBevestigUurVerwijder(false)} style={{flex:1,padding:"4px 6px",fontSize:10,background:"transparent",border:`1px solid ${T.borderDark}`,color:T.textMuted,borderRadius:3,cursor:"pointer"}}>Nee</button>
-                    </div>
+              <button onClick={handleVoegUurToe} style={{padding:"5px 8px",fontSize:11,background:`${BRAND.roze}10`,border:`1px solid ${BRAND.roze}44`,color:BRAND.roze,borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>+ Uur toevoegen</button>
+              {aantalUren > 1 && (bevestigUurVerwijder ? (
+                <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:4,padding:"6px 8px"}}>
+                  <div style={{fontSize:10,color:"#EF4444",fontWeight:600,marginBottom:5}}>Uur {aantalUren} verwijderen?</div>
+                  <div style={{display:"flex",gap:4}}>
+                    <button onClick={handleVerwijderLaatsteUurBevestig} style={{flex:1,padding:"4px 6px",fontSize:10,background:"#EF4444",border:"none",color:"#fff",borderRadius:3,cursor:"pointer",fontWeight:700}}>Ja</button>
+                    <button onClick={()=>setBevestigUurVerwijder(false)} style={{flex:1,padding:"4px 6px",fontSize:10,background:"transparent",border:`1px solid ${T.borderDark}`,color:T.textMuted,borderRadius:3,cursor:"pointer"}}>Nee</button>
                   </div>
-                ) : (
-                  <button onClick={handleVerwijderLaatsteUur} style={{padding:"5px 8px",fontSize:11,background:"#FEF2F2",border:"1px solid #FECACA",color:"#EF4444",borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>
-                    − Uur {aantalUren} verwijderen
-                  </button>
-                )
-              )}
+                </div>
+              ) : (
+                <button onClick={handleVerwijderLaatsteUur} style={{padding:"5px 8px",fontSize:11,background:"#FEF2F2",border:"1px solid #FECACA",color:"#EF4444",borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>− Uur {aantalUren} verwijderen</button>
+              ))}
             </div>
           )}
-
           <div style={{padding:"12px 16px 0",marginTop:8,borderTop:`1px solid ${T.border}`}}>
             <div style={{fontSize:9,letterSpacing:2,color:T.textLight,marginBottom:8,fontWeight:600}}>LEGENDA</div>
             {Object.entries(typeConfig).map(([k,v])=>(
@@ -1577,17 +1582,14 @@ ${items.map(item => {
                 <div style={{fontSize:40,marginBottom:16}}>📻</div>
                 <div style={{fontSize:16,fontWeight:600,color:T.text,marginBottom:8}}>Geen uitzending gekozen</div>
                 <div style={{fontSize:13,marginBottom:20}}>Kies of maak een uitzending aan om te beginnen.</div>
-                <button onClick={()=>setShowUitzendingModal(true)} style={{padding:"10px 24px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}}>
-                  Uitzending kiezen
-                </button>
+                <button onClick={()=>setShowUitzendingModal(true)} style={{padding:"10px 24px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}}>Uitzending kiezen</button>
               </div>
             )}
-
             {actieveUitzending && isUurTab && <>
               <div style={{marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                   <span style={{fontSize:11,color:T.textMuted,fontWeight:500}}>UUR {tabUur} — {uurLabel(tabUur)}</span>
-                  {curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur) + 3600 && (
+                  {curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur)+3600 && (
                     <span style={{fontSize:11,color:BRAND.roze,fontWeight:700,background:`${BRAND.roze}15`,padding:"2px 10px",borderRadius:10}}>▶ LIVE {curStr}</span>
                   )}
                 </div>
@@ -1597,76 +1599,51 @@ ${items.map(item => {
               </div>
               <DriftBalk items={rundown} uur={tabUur} startTijd={startTijd}/>
               {currentItems.map(item=>(
-                <div key={item.id} ref={el=>itemRefs.current[item.id]=el}
-                  style={{scrollMarginTop:12,outline:highlightId===item.id?"2px solid #FF00E7":"none",outlineOffset:2,borderRadius:6,transition:"outline 0.3s"}}>
+                <div key={item.id} ref={el=>itemRefs.current[item.id]=el} style={{scrollMarginTop:12,outline:highlightId===item.id?"2px solid #FF00E7":"none",outlineOffset:2,borderRadius:6,transition:"outline 0.3s"}}>
                   <ItemCard item={item} role={role}
-                    onUpdate={handleUpdate} onDuurChange={handleDuurChange}
-                    onRename={handleRename}
+                    onUpdate={handleUpdate} onDuurChange={handleDuurChange} onRename={handleRename}
                     onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
                     onDeleteVraag={role==="Eindredactie" ? handleDeleteVraag : null}
                     onDeleteBevestig={()=>handleDelete(verwijderBevestigId)}
                     onDeleteAnnuleer={handleDeleteAnnuleer}
-                    verwijderBevestig={verwijderBevestigId === item.id}
+                    verwijderBevestig={verwijderBevestigId===item.id}
                     isActive={getActiveId(tabUur)===item.id}
                     isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
                 </div>
               ))}
               {role==="Eindredactie" && <ToevoegenKnop uur={tabUur} onAdd={handleAddItem}/>}
             </>}
-
             {actieveUitzending && tab==="redactie" && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
           </div>
-
           {actieveUitzending && isUurTab && role==="Eindredactie" && (
-            <TimelinePanel
-              items={rundown} uur={tabUur} activeId={getActiveId(tabUur)}
-              onReorder={handleReorder}
-              onDeleteVraag={handleDeleteVraag}
-              onDeleteBevestig={handleDelete}
-              onDeleteAnnuleer={handleDeleteAnnuleer}
-              verwijderBevestigId={verwijderBevestigId}
-              onAdd={(uur,type)=>handleAddItem(uur,type,"einde")}
-              onScrollTo={scrollToItem}
-            />
+            <TimelinePanel items={rundown} uur={tabUur} activeId={getActiveId(tabUur)} onReorder={handleReorder}
+              onDeleteVraag={handleDeleteVraag} onDeleteBevestig={handleDelete} onDeleteAnnuleer={handleDeleteAnnuleer}
+              verwijderBevestigId={verwijderBevestigId} onAdd={(uur,type)=>handleAddItem(uur,type,"einde")} onScrollTo={scrollToItem}/>
           )}
         </div>
       </div>
 
-      <UitzendingModal
-        open={showUitzendingModal}
-        uitzendingen={uitzendingen}
-        onSelect={handleSelectUitzending}
-        onCreate={handleCreate}
+      <UitzendingModal open={showUitzendingModal} uitzendingen={uitzendingen}
+        onSelect={handleSelectUitzending} onCreate={handleCreate}
         onClose={uitzendingen.length>0?()=>setShowUitzendingModal(false):null}
-        onDelete={handleDeleteUitzending}
-        onCopy={handleCopyUitzending}
-        onRename={handleRenameUitzending}
-        laadFout={uitzendingLoadFout}
-        onHerlaad={laadUitzendingen}
-      />
+        onDelete={handleDeleteUitzending} onCopy={handleCopyUitzending}
+        onRename={handleRenameUitzending} laadFout={uitzendingLoadFout} onHerlaad={laadUitzendingen}/>
       <ZoekModal open={zoekOpen} onClose={()=>setZoekOpen(false)} onSelect={handleTrackSelect}/>
 
       {herstelbaarItem && (
-        <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",
-          background:"#1F2937",color:"#fff",padding:"12px 20px",borderRadius:10,
-          display:"flex",alignItems:"center",gap:14,zIndex:6000,
-          boxShadow:"0 4px 20px rgba(0,0,0,0.35)",whiteSpace:"nowrap"}}>
-          <span style={{fontSize:13}}>
-            <span style={{opacity:0.7}}>Verwijderd:</span> <strong>{herstelbaarItem.item.what}</strong>
-          </span>
-          <button onClick={handleHerstel} style={{padding:"5px 14px",background:BRAND.roze,border:"none",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:700,flexShrink:0}}>
-            ↩ Herstellen
-          </button>
-          <button onClick={()=>{ clearTimeout(herstelTimer.current); setHerstelbaarItem(null); }}
-            style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:16,padding:"0 2px",lineHeight:1}}>✕</button>
+        <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#1F2937",color:"#fff",padding:"12px 20px",borderRadius:10,display:"flex",alignItems:"center",gap:14,zIndex:6000,boxShadow:"0 4px 20px rgba(0,0,0,0.35)",whiteSpace:"nowrap"}}>
+          <span style={{fontSize:13}}><span style={{opacity:0.7}}>Verwijderd:</span> <strong>{herstelbaarItem.item.what}</strong></span>
+          <button onClick={handleHerstel} style={{padding:"5px 14px",background:BRAND.roze,border:"none",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:700,flexShrink:0}}>↩ Herstellen</button>
+          <button onClick={()=>{clearTimeout(herstelTimer.current);setHerstelbaarItem(null);}} style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:16,padding:"0 2px",lineHeight:1}}>✕</button>
         </div>
       )}
     </div>
   );
 }
 
+
 // ════════════════════════════════════════════════════════════
-//  RedactieTab
+//  RedactieTab — Firebase versie
 // ════════════════════════════════════════════════════════════
 function RedactieTab({ uitzendingId, setSyncStatus }) {
   const [redactie, setRedactie] = useState([
@@ -1678,46 +1655,46 @@ function RedactieTab({ uitzendingId, setSyncStatus }) {
     {functie:"Webredactie",taak:"Regisseur / Cameraregie",produceert:"MaLive redactie",namen:[""]},
   ]);
 
-  useEffect(()=>{
-    if(!API_KLAAR) return;
-    sheetGet("getRedactie",uitzendingId).then(r=>{
-      if(r?.ok&&r.data?.length) {
-        setRedactie(r.data.map(x=>({...x, namen: x.namen||(x.naam?[x.naam]:[""])})));
+  useEffect(() => {
+    get(dbRef(db, `redactie/${uitzendingId}`)).then(snap => {
+      if (snap.exists()) {
+        const data = snap.val();
+        if (Array.isArray(data) && data.length) {
+          setRedactie(data.map(x => ({ ...x, namen: x.namen || (x.naam ? [x.naam] : [""]) })));
+        }
       }
     });
-  },[uitzendingId]);
+  }, [uitzendingId]);
 
-  const db=useDebounce(redactie,1000);
-  const first=useRef(true);
-  useEffect(()=>{
-    if(!API_KLAAR) return;
-    if(first.current){first.current=false;return;}
+  const debouncedRedactie = useDebounce(redactie, 1000);
+  const first = useRef(true);
+
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
     setSyncStatus("opslaan");
-    sheetPost({action:"saveRedactie",uitzendingId,data:db}).then(r=>setSyncStatus(r?.ok?"ok":"fout"));
-  },[db]);
+    set(dbRef(db, `redactie/${uitzendingId}`), debouncedRedactie)
+      .then(() => setSyncStatus("live"))
+      .catch(() => setSyncStatus("fout"));
+  }, [debouncedRedactie]);
 
-  const updNaam=(i,j,v)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:r.namen.map((n,ni)=>ni===j?v:n)}));
-  const addNaam=(i)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:[...r.namen,""]}));
-  const delNaam=(i,j)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:r.namen.filter((_,ni)=>ni!==j)||[""]}));
+  const updNaam = (i,j,v) => setRedactie(p => p.map((r,ri) => ri!==i ? r : {...r, namen: r.namen.map((n,ni) => ni===j ? v : n)}));
+  const addNaam = (i) => setRedactie(p => p.map((r,ri) => ri!==i ? r : {...r, namen: [...r.namen, ""]}));
+  const delNaam = (i,j) => setRedactie(p => p.map((r,ri) => ri!==i ? r : {...r, namen: r.namen.filter((_,ni) => ni!==j) || [""]}));
 
   return (
     <div>
       <div style={{fontSize:11,letterSpacing:2,color:T.textMuted,marginBottom:14,fontWeight:600,textTransform:"uppercase"}}>Redactie & Rolverdeling</div>
-      {redactie.map((r,i)=>(
-        <div key={i} style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:6,padding:"12px 16px",marginBottom:6,
-          display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1.2fr",gap:12,alignItems:"start",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+      {redactie.map((r,i) => (
+        <div key={i} style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:6,padding:"12px 16px",marginBottom:6,display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1.2fr",gap:12,alignItems:"start",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
           <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>FUNCTIE</div><div style={{fontSize:13,color:T.text,fontWeight:600}}>{r.functie}</div></div>
           <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>ROL</div><div style={{fontSize:12,color:T.textMuted}}>{r.taak||"—"}</div></div>
           <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>PRODUCEERT</div><div style={{fontSize:11,color:T.textMuted}}>{r.produceert}</div></div>
           <div>
             <div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:4,fontWeight:600}}>WIE</div>
-            {(r.namen||[""]).map((n,j)=>(
+            {(r.namen||[""]).map((n,j) => (
               <div key={j} style={{display:"flex",gap:4,marginBottom:4}}>
-                <input value={n} onChange={e=>updNaam(i,j,e.target.value)} placeholder="Naam…"
-                  style={{flex:1,padding:"5px 8px",fontSize:12,border:`1px solid ${T.inputBorder}`,borderRadius:5,background:T.inputBg,color:T.text}}/>
-                {r.namen.length>1&&(
-                  <button onClick={()=>delNaam(i,j)} style={{padding:"4px 7px",fontSize:11,border:`1px solid ${T.border}`,borderRadius:5,background:"transparent",color:"#EF4444",cursor:"pointer"}}>×</button>
-                )}
+                <input value={n} onChange={e=>updNaam(i,j,e.target.value)} placeholder="Naam…" style={{flex:1,padding:"5px 8px",fontSize:12,border:`1px solid ${T.inputBorder}`,borderRadius:5,background:T.inputBg,color:T.text}}/>
+                {r.namen.length>1 && <button onClick={()=>delNaam(i,j)} style={{padding:"4px 7px",fontSize:11,border:`1px solid ${T.border}`,borderRadius:5,background:"transparent",color:"#EF4444",cursor:"pointer"}}>×</button>}
               </div>
             ))}
             <button onClick={()=>addNaam(i)} style={{fontSize:10,color:BRAND.paars,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px",fontWeight:600}}>+ naam toevoegen</button>
