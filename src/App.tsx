@@ -20,14 +20,6 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 const DB_KLAAR = true;
 
-import { useState, useEffect, useCallback, useRef } from "react";
-
-// @ts-nocheck
-
-// API Configuratie
-const API_URL = "https://script.google.com/macros/s/AKfycbwbn8HvG_lvAlmAF0IDXUCB3TCr9WsIo7hZ3_Sj1UJ3eSepjr0fFCxEDwCdOkMPKgyz/exec";
-const API_KLAAR = !API_URL.includes("https://script.google.com/macros/s/AKfycbwbn8HvG_lvAlmAF0IDXUCB3TCr9WsIo7hZ3_Sj1UJ3eSepjr0fFCxEDwCdOkMPKgyz/exec");
-
 // ─── kleuren (licht thema) ────────────────────────────────
 const BRAND = {
   roze: "#FF00E7",
@@ -1039,117 +1031,7 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, act
 // ════════════════════════════════════════════════════════════
 //  HOOFDAPP
 // ════════════════════════════════════════════════════════════
-// ─── LoginGate Component ──────────────────────────────────
-function LoginGate({ onLoginSuccess }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [fout, setFout] = useState(false);
-  
-  const CORRECT_USERNAME = "RadioredactieMaLive";
-  const CORRECT_PASSWORD = "radiomakenishetmooistedateris";
-  
-  const handleSubmit = () => {
-    if (username === CORRECT_USERNAME && password === CORRECT_PASSWORD) {
-      localStorage.setItem("malive_logged_in", "true");
-      onLoginSuccess();
-    } else {
-      setFout(true);
-      setUsername("");
-      setPassword("");
-      setTimeout(() => setFout(false), 2000);
-    }
-  };
-  
-  return (
-    <div style={{
-      position: "fixed",
-      top: 0, left: 0, right: 0, bottom: 0,
-      background: "rgba(0,0,0,0.5)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 9999
-    }}>
-      <div style={{
-        background: "#FFFFFF",
-        borderRadius: 12,
-        padding: "40px 32px",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-        maxWidth: 400,
-        textAlign: "center"
-      }}>
-        <div style={{fontSize: 32, fontWeight: 700, color: BRAND.roze, marginBottom: 8}}>MaLive</div>
-        <div style={{fontSize: 14, color: T.textMuted, marginBottom: 24}}>Inloggen</div>
-        
-        <input
-          type="text"
-          value={username}
-          onChange={e => setUsername(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleSubmit()}
-          placeholder="Inlognaam…"
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            fontSize: 16,
-            border: `2px solid ${fout ? "#EF4444" : T.inputBorder}`,
-            borderRadius: 8,
-            marginBottom: 12,
-            boxSizing: "border-box",
-            background: T.inputBg,
-            color: T.text
-          }}
-          autoFocus
-        />
-        
-        <input
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleSubmit()}
-          placeholder="Wachtwoord…"
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            fontSize: 16,
-            border: `2px solid ${fout ? "#EF4444" : T.inputBorder}`,
-            borderRadius: 8,
-            marginBottom: 16,
-            boxSizing: "border-box",
-            background: T.inputBg,
-            color: T.text
-          }}
-        />
-        
-        {fout && (
-          <div style={{color: "#EF4444", fontSize: 13, marginBottom: 16, fontWeight: 500}}>Onjuiste inloggegevens. Probeer opnieuw.</div>
-        )}
-        
-        <button
-          onClick={handleSubmit}
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            fontSize: 14,
-            fontWeight: 600,
-            background: BRAND.gradient,
-            color: "white",
-            border: "none",
-            borderRadius: 8,
-            cursor: "pointer",
-            transition: "opacity 0.2s"
-          }}
-          onMouseOver={e => e.target.style.opacity = "0.9"}
-          onMouseOut={e => e.target.style.opacity = "1"}
-        >
-          Inloggen
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [uitzendingen, setUitzendingen] = useState([]);
   const [actieveUitzending, setActieveUitzending] = useState(null);
   const [showUitzendingModal, setShowUitzendingModal] = useState(true);
@@ -1174,14 +1056,6 @@ export default function App() {
   // Tab-helpers
   const isUurTab = tab.startsWith("uur_");
   const tabUur = isUurTab ? parseInt(tab.split("_")[1]) : 0;
-
-  // Login check
-  useEffect(() => {
-    const isLoggedInStored = localStorage.getItem("malive_logged_in");
-    if (isLoggedInStored === "true") {
-      setIsLoggedIn(true);
-    }
-  }, []);
 
   useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
 
@@ -1472,10 +1346,6 @@ export default function App() {
   ];
 
   const currentItems = isUurTab ? rundown.filter(i => i.uur === tabUur) : [];
-
-  if (!isLoggedIn) {
-    return <LoginGate onLoginSuccess={() => setIsLoggedIn(true)} />;
-  }
 
   return (
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
