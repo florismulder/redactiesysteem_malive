@@ -4,9 +4,7 @@ import { initializeApp } from "firebase/app";
 import { getDatabase, ref as dbRef, set, get, onValue, update, remove } from "firebase/database";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 
-// ════════════════════════════════════════════════════════════
-//  ⚙️  Firebase configuratie
-// ════════════════════════════════════════════════════════════
+// Firebase config & init
 const firebaseConfig = {
   apiKey: "AIzaSyBlUnaR98BIeBjfqtzBv39L42R2oveMMs0",
   authDomain: "redactiesysteem-malive.firebaseapp.com",
@@ -20,8 +18,6 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
-const DB_KLAAR = true;
-const API_KLAAR = false;
 
 // ─── kleuren (licht thema) ────────────────────────────────
 const BRAND = {
@@ -29,11 +25,13 @@ const BRAND = {
   paars: "#6A0DAD",
   gradient: "linear-gradient(135deg, #FF00E7, #6A0DAD)",
 };
+
 const roleColors = {
   Eindredactie: "#CC00BB", Host: "#0097A7",
   Techniek: "#F57F17", Nieuwsredactie: "#2E7D32",
   Muziekredactie: "#6A0DAD",
 };
+
 const typeConfig = {
   muziek:    { label:"MUZIEK",    color:"#1565C0", icon:"♪",  bg:"#EBF3FF" },
   jingle:    { label:"JINGLE",    color:"#C62828", icon:"▶",  bg:"#FFEBEE" },
@@ -43,7 +41,6 @@ const typeConfig = {
   special:   { label:"SPECIAL",  color:"#00796B", icon:"★",  bg:"#E8F5F3" },
 };
 
-// ─── thema kleuren ────────────────────────────────────────
 const T = {
   bg:         "#F5F6F8",
   bgCard:     "#FFFFFF",
@@ -58,27 +55,19 @@ const T = {
   inputBorder:"#6B7280",
 };
 
-// ─── helpers ──────────────────────────────────────────────
 const toSec = s => { if (!s) return 0; const p = s.toString().split(":"); return p.length===1 ? parseInt(p[0])*60 : parseInt(p[0])*60+parseInt(p[1]||0); };
 const toMMSS = s => { if (!s) return ""; return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`; };
 const addSec = (t, s) => { const clean=cleanTime(t); const [h,m]=clean.split(":").map(Number); const tot=h*3600+m*60+Math.round(s); return `${String(Math.floor(tot/3600)).padStart(2,"0")}:${String(Math.floor((tot%3600)/60)).padStart(2,"0")}`; };
 const timeToSec = t => { const clean=cleanTime(t); const [h,m]=clean.split(":").map(Number); return h*3600+m*60; };
-// Converts any time value to clean "HH:MM"
-// Handles: "12:00", "Sat Dec 30 1899 12:00:00 GMT+0100 (...)", ISO strings
+
 function cleanTime(t) {
   if (!t) return "12:00";
   const s = String(t).trim();
-  // Already clean HH:MM
   if (/^\d{1,2}:\d{2}$/.test(s)) return s;
-  // Google Sheets time: "Sat Dec 30 1899 HH:MM:SS GMT+0100 (Midden-Europese standaardtijd)"
   const timeMatch = s.match(/(\d{1,2}):(\d{2}):\d{2}/);
-  if (timeMatch) {
-    return timeMatch[1].padStart(2,"0") + ":" + timeMatch[2];
-  }
+  if (timeMatch) return timeMatch[1].padStart(2,"0") + ":" + timeMatch[2];
   const shortMatch = s.match(/(\d{1,2}):(\d{2})/);
-  if (shortMatch) {
-    return shortMatch[1].padStart(2,"0") + ":" + shortMatch[2];
-  }
+  if (shortMatch) return shortMatch[1].padStart(2,"0") + ":" + shortMatch[2];
   return "12:00";
 }
 
@@ -88,10 +77,9 @@ const maandNamen = ["januari","februari","maart","april","mei","juni","juli","au
 function formatDatum(dateStr) {
   if (!dateStr) return "";
   const str = String(dateStr).trim();
-  let y, m, day;
   const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) {
-    [, y, m, day] = isoMatch.map(Number);
+    const [, y, m, day] = isoMatch.map(Number);
     const d = new Date(y, m-1, day);
     if (str.includes("T")) {
       const timePart = str.split("T")[1]||"";
@@ -100,27 +88,17 @@ function formatDatum(dateStr) {
     }
     return `${dagNamen[d.getDay()]} ${d.getDate()} ${maandNamen[d.getMonth()]} ${d.getFullYear()}`;
   }
-  try {
-    const d = new Date(str);
-    if (!isNaN(d.getTime()) && d.getFullYear() > 1900) {
-      return `${dagNamen[d.getDay()]} ${d.getDate()} ${maandNamen[d.getMonth()]} ${d.getFullYear()}`;
-    }
-  } catch(e) {}
   return str;
 }
 
-// Geeft een nette naam terug voor een uitzending
 function formatUitzendingNaam(u) {
   if (!u) return "";
   const naam = u.naam || "";
-  const isRommel = !naam || naam === "undefined" || naam.includes("GMT") ||
-    naam.includes("T22:") || naam.includes("T00:") || naam.includes("00:00:00") ||
-    /^\d{4}-\d{2}-\d{2}T/.test(naam) || naam.match(/^\w{3} \w{3}/);
+  const isRommel = !naam || naam === "undefined" || naam.includes("GMT") || naam.includes("T");
   if (isRommel) return formatDatum(u.datum);
   return naam;
 }
 
-// ─── basisrundown ──────────────────────────────────────────
 const BASE_OFFSETS = [
   { id:1,  offset:0,    dur:180, type:"muziek",    what:"Muziek",                   who:["Techniek","Muziekredactie"], extra:{artiest:"",nummer:"",feitje:""},            uur:1 },
   { id:2,  offset:180,  dur:5,   type:"jingle",    what:"Openingsjingle",            who:["Techniek"],               extra:{label:"Openingsjingle"},                    uur:1 },
@@ -176,7 +154,6 @@ function buildBase(startTijd = "12:00") {
   }));
 }
 
-// Genereer een standaard rundown voor uur N (N >= 3)
 function buildUurBase(uur, startTijd = "12:00") {
   const startSec = timeToSec(startTijd) + (uur - 1) * 3600;
   const ts = Date.now();
@@ -201,7 +178,6 @@ function buildUurBase(uur, startTijd = "12:00") {
   }));
 }
 
-// ─── herbereken: generiek voor elk aantal uren ────────────
 function herbereken(items, startTijd = "12:00") {
   const startSec = timeToSec(startTijd);
   const uren = [...new Set(items.map(i => i.uur))].sort((a, b) => a - b);
@@ -217,111 +193,75 @@ function herbereken(items, startTijd = "12:00") {
   return res;
 }
 
-// ─── driftSec: generiek voor elk uur ─────────────────────
 function driftSec(items, uur, startTijd = "12:00") {
   const startSec = timeToSec(startTijd);
   const uurStart = startSec + (uur - 1) * 3600;
   return uurStart + items.filter(i => i.uur === uur).reduce((s, i) => s + i.duurWerkelijkSec, 0) - (uurStart + 3600);
 }
 
-// ════════════════════════════════════════════════════════════
-//  Google Sheets API
-// ════════════════════════════════════════════════════════════
-async function sheetGet(action, uitzendingId) {
-  if (!API_KLAAR) return null;
+async function saveRundownToDB(uitzendingId, rundown) {
   try {
-    const r = await fetch(`${API_URL}?action=${action}&uitzendingId=${encodeURIComponent(uitzendingId)}`);
-    return await r.json();
-  } catch { return null; }
-}
-
-async function sheetPost(body) {
-  if (!API_KLAAR) return null;
-  try {
-    const params = new URLSearchParams({
-      action: body.action,
-      uitzendingId: body.uitzendingId,
-      data: JSON.stringify(body.data),
+    const rundownRef = dbRef(db, `rundown/${uitzendingId}`);
+    const rundownData = {};
+    rundown.forEach(item => {
+      rundownData[String(item.id)] = {
+        id: item.id, type: item.type, what: item.what, who: item.who, uur: item.uur,
+        extra: item.extra, duurGeplandSec: item.duurGeplandSec, duurWerkelijkSec: item.duurWerkelijkSec,
+        spotifyUri: item.spotifyUri || null, time: item.time,
+      };
     });
-    const r = await fetch(`${API_URL}?${params.toString()}`);
-    return await r.json();
-  } catch { return null; }
+    rundownData._order = { ids: rundown.map(i => String(i.id)) };
+    await set(rundownRef, rundownData);
+    return { ok: true };
+  } catch (e) {
+    console.error("Savefailed:", e);
+    return { ok: false };
+  }
 }
 
-// ════════════════════════════════════════════════════════════
-//  Debounce hook
-// ════════════════════════════════════════════════════════════
+async function createUitzendingInDB(data) {
+  try {
+    const id = "uitz_" + Date.now();
+    const uitzRef = dbRef(db, `uitzendingen/${id}`);
+    await set(uitzRef, { id, datum: data.datum, naam: data.naam, startTijd: data.startTijd || "12:00", eindTijd: data.eindTijd || "14:00", aantalUren: data.aantalUren || 2 });
+    return id;
+  } catch (e) {
+    console.error("Create failed:", e);
+    return null;
+  }
+}
+
+async function deleteUitzendingFromDB(id) {
+  try {
+    await set(dbRef(db, `uitzendingen/${id}`), null);
+    await set(dbRef(db, `rundown/${id}`), null);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false };
+  }
+}
+
 function useDebounce(value, delay) {
   const [dv, setDv] = useState(value);
   useEffect(() => { const t = setTimeout(()=>setDv(value), delay); return ()=>clearTimeout(t); }, [value, delay]);
   return dv;
 }
 
-// ════════════════════════════════════════════════════════════
-//  SyncBadge
-// ════════════════════════════════════════════════════════════
 function SyncBadge({ status }) {
-  const cfg = {
-    idle:    { color:"#6B7280", label:"" },
-    laden:   { color:"#F59E0B", label:"⟳ Laden…" },
-    opslaan: { color:"#F59E0B", label:"⟳ Opslaan…" },
-    ok:      { color:"#10B981", label:"✓ Gesynchroniseerd" },
-    fout:    { color:"#EF4444", label:"✕ Sync mislukt" },
-    lokaal:  { color:"#6B7280", label:"● Lokaal" },
-  };
+  const cfg = { idle: { color:"#6B7280", label:"" }, laden: { color:"#F59E0B", label:"⟳ Laden…" }, opslaan: { color:"#F59E0B", label:"⟳ Opslaan…" }, ok: { color:"#10B981", label:"✓ Gesynchroniseerd" }, fout: { color:"#EF4444", label:"✕ Sync mislukt" }, lokaal: { color:"#6B7280", label:"● Lokaal" } };
   const c = cfg[status] || cfg.idle;
   if (!c.label) return null;
-  return (
-    <div style={{fontSize:11,color:c.color,padding:"3px 10px",borderRadius:10,
-      border:`1px solid ${c.color}55`,background:`${c.color}11`,fontWeight:500}}>
-      {c.label}
-    </div>
-  );
+  return <div style={{fontSize:11,color:c.color,padding:"3px 10px",borderRadius:10,border:`1px solid ${c.color}55`,background:`${c.color}11`,fontWeight:500}}>{c.label}</div>;
 }
 
-// ════════════════════════════════════════════════════════════
-//  UitzendingModal — met verwijderknop per uitzending
-// ════════════════════════════════════════════════════════════
 function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDelete, onCopy }) {
   const [nieuwDatum, setNieuwDatum] = useState("");
   const [nieuwNaam, setNieuwNaam] = useState("");
   const [nieuwStart, setNieuwStart] = useState("12:00");
   const [nieuwEind, setNieuwEind] = useState("14:00");
   const [aanmaken, setAanmaken] = useState(false);
-  const [bevestigId, setBevestigId] = useState(null);  // id bezig met verwijderen
-  const [kopieerInfo, setKopieerInfo] = useState(null); // { id, datum, naam } bezig met kopiëren
-
-  function handleCreate() {
-    if (!nieuwDatum) return;
-    const naam = nieuwNaam || formatDatum(nieuwDatum);
-    onCreate({ datum: nieuwDatum, naam, startTijd: nieuwStart, eindTijd: nieuwEind });
-    setAanmaken(false);
-  }
-
-  function handleDeleteClick(e, id) {
-    e.stopPropagation();
-    setKopieerInfo(null);
-    setBevestigId(id);
-  }
-
-  function handleDeleteConfirm(e) {
-    e.stopPropagation();
-    if (onDelete && bevestigId) onDelete(bevestigId);
-    setBevestigId(null);
-  }
-
-  function handleKopieerClick(e, u) {
-    e.stopPropagation();
-    setBevestigId(null);
-    setKopieerInfo({ id: u.id, datum: "", naam: `Kopie van ${formatUitzendingNaam(u)}` });
-  }
-
-  function handleKopieerBevestig(e) {
-    e.stopPropagation();
-    if (!kopieerInfo?.datum) return;
-    onCopy(kopieerInfo.id, { datum: kopieerInfo.datum, naam: kopieerInfo.naam });
-    setKopieerInfo(null);
-  }
+  const [bevestigId, setBevestigId] = useState(null);
+  const [kopieerInfo, setKopieerInfo] = useState(null);
 
   if (!open) return null;
   return (
@@ -329,140 +269,37 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
       <div style={{background:"#fff",borderRadius:12,width:540,maxHeight:"80vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
         <div style={{padding:"20px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12}}>
           <div style={{width:36,height:36,borderRadius:8,background:BRAND.gradient,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:14,color:"#fff"}}>MA</div>
-          <div>
-            <div style={{fontSize:16,fontWeight:700,color:T.text}}>Uitzending kiezen</div>
-            <div style={{fontSize:12,color:T.textMuted}}>Kies een bestaande uitzending of maak een nieuwe aan</div>
-          </div>
-          {onClose && uitzendingen.length > 0 && (
-            <button onClick={onClose} style={{marginLeft:"auto",background:"transparent",border:"none",color:T.textLight,fontSize:20,cursor:"pointer"}}>✕</button>
-          )}
+          <div><div style={{fontSize:16,fontWeight:700,color:T.text}}>Uitzending kiezen</div><div style={{fontSize:12,color:T.textMuted}}>Kies of maak een uitzending aan</div></div>
+          {onClose && uitzendingen.length > 0 && <button onClick={onClose} style={{marginLeft:"auto",background:"transparent",border:"none",color:T.textLight,fontSize:20,cursor:"pointer"}}>✕</button>}
         </div>
-
         <div style={{overflowY:"auto",flex:1}}>
-          {uitzendingen.length === 0 && !aanmaken && (
-            <div style={{padding:"32px 24px",color:T.textMuted,textAlign:"center",fontSize:13}}>
-              {API_KLAAR ? "⏳ Uitzendingen worden geladen…" : "Nog geen uitzendingen. Maak er een aan om te beginnen."}
-            </div>
-          )}
+          {uitzendingen.length === 0 && !aanmaken && <div style={{padding:"32px 24px",color:T.textMuted,textAlign:"center",fontSize:13}}>Nog geen uitzendingen. Maak er een aan om te beginnen.</div>}
           {uitzendingen.map(u => (
             <div key={u.id}>
-              <div onClick={()=>{ setBevestigId(null); setKopieerInfo(null); onSelect(u); }}
-                onMouseEnter={e=>e.currentTarget.style.background="#F9FAFB"}
-                onMouseLeave={e=>e.currentTarget.style.background="#fff"}
-                style={{padding:"14px 24px",cursor:"pointer",display:"flex",alignItems:"center",gap:14,borderBottom: kopieerInfo?.id===u.id ? "none" : `1px solid ${T.border}`,transition:"background 0.1s"}}>
+              <div onClick={()=>{ setBevestigId(null); setKopieerInfo(null); onSelect(u); }} onMouseEnter={e=>e.currentTarget.style.background="#F9FAFB"} onMouseLeave={e=>e.currentTarget.style.background="#fff"} style={{padding:"14px 24px",cursor:"pointer",display:"flex",alignItems:"center",gap:14,borderBottom: kopieerInfo?.id===u.id ? "none" : `1px solid ${T.border}`,transition:"background 0.1s"}}>
                 <div style={{width:10,height:10,borderRadius:"50%",background:BRAND.gradient,flexShrink:0}}/>
                 <div style={{flex:1}}>
                   <div style={{fontSize:14,fontWeight:600,color:T.text}}>{formatUitzendingNaam(u)}</div>
-                  <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>
-                    {formatDatum(u.datum)} · {cleanTime(u.startTijd||"12:00")} – {cleanTime(u.eindTijd||"14:00")}
-                    {u.aantalUren > 2 && <span style={{marginLeft:6,color:BRAND.paars,fontWeight:600}}>{u.aantalUren} uur</span>}
-                  </div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{formatDatum(u.datum)} · {cleanTime(u.startTijd||"12:00")} – {cleanTime(u.eindTijd||"14:00")}{u.aantalUren > 2 && <span style={{marginLeft:6,color:BRAND.paars,fontWeight:600}}>{u.aantalUren} uur</span>}</div>
                 </div>
-                {/* Verwijder-bevestiging */}
                 {bevestigId === u.id ? (
-                  <div style={{display:"flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
-                    <span style={{fontSize:11,color:"#EF4444",fontWeight:600}}>Verwijderen?</span>
-                    <button onClick={handleDeleteConfirm}
-                      style={{padding:"3px 10px",background:"#EF4444",border:"none",color:"#fff",borderRadius:4,cursor:"pointer",fontSize:11,fontWeight:700}}>Ja</button>
-                    <button onClick={e=>{e.stopPropagation();setBevestigId(null);}}
-                      style={{padding:"3px 10px",background:"transparent",border:`1px solid ${T.borderDark}`,color:T.textMuted,borderRadius:4,cursor:"pointer",fontSize:11}}>Nee</button>
-                  </div>
+                  <div style={{display:"flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}><span style={{fontSize:11,color:"#EF4444",fontWeight:600}}>Verwijderen?</span><button onClick={e=>{e.stopPropagation(); onDelete(bevestigId); setBevestigId(null);}} style={{padding:"3px 10px",background:"#EF4444",border:"none",color:"#fff",borderRadius:4,cursor:"pointer",fontSize:11,fontWeight:700}}>Ja</button><button onClick={e=>{e.stopPropagation();setBevestigId(null);}} style={{padding:"3px 10px",background:"transparent",border:`1px solid ${T.borderDark}`,color:T.textMuted,borderRadius:4,cursor:"pointer",fontSize:11}}>Nee</button></div>
                 ) : (
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    {/* Kopieer-knop */}
-                    <button onClick={e=>handleKopieerClick(e, u)}
-                      title="Uitzending kopiëren"
-                      style={{background:"transparent",border:`1px solid ${T.border}`,color:BRAND.paars,
-                        borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}}
-                      onMouseEnter={e=>e.currentTarget.style.opacity="1"}
-                      onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>
-                      ⧉
-                    </button>
-                    {/* Verwijder-knop */}
-                    <button onClick={e=>handleDeleteClick(e, u.id)}
-                      title="Uitzending verwijderen"
-                      style={{background:"transparent",border:`1px solid ${T.border}`,color:"#EF4444",
-                        borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}}
-                      onMouseEnter={e=>e.currentTarget.style.opacity="1"}
-                      onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>
-                      🗑
-                    </button>
-                    <div style={{fontSize:12,color:BRAND.roze,fontWeight:600}}>Laden →</div>
-                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><button onClick={e=>{e.stopPropagation(); setKopieerInfo({ id: u.id, datum: "", naam: `Kopie van ${formatUitzendingNaam(u)}` });}} style={{background:"transparent",border:`1px solid ${T.border}`,color:BRAND.paars,borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>⧉</button><button onClick={e=>{e.stopPropagation(); setBevestigId(u.id);}} style={{background:"transparent",border:`1px solid ${T.border}`,color:"#EF4444",borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>🗑</button><div style={{fontSize:12,color:BRAND.roze,fontWeight:600}}>Laden →</div></div>
                 )}
               </div>
-              {/* Kopieer-form — inline onder de rij */}
-              {kopieerInfo?.id === u.id && (
-                <div style={{padding:"12px 24px",background:"#F9F0FF",borderBottom:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:8}}
-                  onClick={e=>e.stopPropagation()}>
-                  <div style={{fontSize:11,color:BRAND.paars,fontWeight:600,letterSpacing:1,textTransform:"uppercase"}}>Kopiëren naar nieuwe uitzending</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:8}}>
-                    <div>
-                      <div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>NIEUWE DATUM</div>
-                      <input type="date" value={kopieerInfo.datum}
-                        onChange={e=>setKopieerInfo(p=>({...p,datum:e.target.value}))}
-                        style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
-                    </div>
-                    <div>
-                      <div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>NAAM (optioneel)</div>
-                      <input type="text" value={kopieerInfo.naam}
-                        onChange={e=>setKopieerInfo(p=>({...p,naam:e.target.value}))}
-                        style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
-                    </div>
-                  </div>
-                  <div style={{display:"flex",gap:8}}>
-                    <button onClick={handleKopieerBevestig} disabled={!kopieerInfo.datum}
-                      style={{padding:"6px 16px",background:kopieerInfo.datum?BRAND.gradient:"#E5E7EB",border:"none",color:kopieerInfo.datum?"#fff":T.textMuted,borderRadius:6,cursor:kopieerInfo.datum?"pointer":"default",fontSize:12,fontWeight:700}}>
-                      Kopiëren
-                    </button>
-                    <button onClick={e=>{e.stopPropagation();setKopieerInfo(null);}}
-                      style={{padding:"6px 12px",background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,borderRadius:6,cursor:"pointer",fontSize:12}}>
-                      Annuleer
-                    </button>
-                  </div>
-                </div>
-              )}
+              {kopieerInfo?.id === u.id && <div style={{padding:"12px 24px",background:"#F9F0FF",borderBottom:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:8}} onClick={e=>e.stopPropagation()}><div style={{fontSize:11,color:BRAND.paars,fontWeight:600,letterSpacing:1,textTransform:"uppercase"}}>Kopiëren</div><div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:8}}><div><div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>DATUM</div><input type="date" value={kopieerInfo.datum} onChange={e=>setKopieerInfo(p=>({...p,datum:e.target.value}))} style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/></div><div><div style={{fontSize:10,color:T.textMuted,marginBottom:3,fontWeight:500}}>NAAM</div><input type="text" value={kopieerInfo.naam} onChange={e=>setKopieerInfo(p=>({...p,naam:e.target.value}))} style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/></div></div><div style={{display:"flex",gap:8}}><button onClick={e=>{e.stopPropagation(); onCopy(kopieerInfo.id, { datum: kopieerInfo.datum, naam: kopieerInfo.naam }); setKopieerInfo(null);}} disabled={!kopieerInfo.datum} style={{padding:"6px 16px",background:kopieerInfo.datum?BRAND.gradient:"#E5E7EB",border:"none",color:kopieerInfo.datum?"#fff":T.textMuted,borderRadius:6,cursor:kopieerInfo.datum?"pointer":"default",fontSize:12,fontWeight:700}}>Kopiëren</button><button onClick={e=>{e.stopPropagation();setKopieerInfo(null);}} style={{padding:"6px 12px",background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,borderRadius:6,cursor:"pointer",fontSize:12}}>Annuleer</button></div></div>}
             </div>
           ))}
         </div>
-
         <div style={{borderTop:`1px solid ${T.border}`,padding:"16px 24px"}}>
           {!aanmaken ? (
-            <button onClick={()=>setAanmaken(true)} style={{
-              width:"100%",padding:"10px",background:"transparent",
-              border:`1px dashed ${BRAND.roze}`,color:BRAND.roze,
-              borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600
-            }}>+ Nieuwe uitzending aanmaken</button>
+            <button onClick={()=>setAanmaken(true)} style={{width:"100%",padding:"10px",background:"transparent",border:`1px dashed ${BRAND.roze}`,color:BRAND.roze,borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}}>+ Nieuwe uitzending aanmaken</button>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div style={{fontSize:11,color:T.textMuted,fontWeight:600,letterSpacing:1,textTransform:"uppercase"}}>Nieuwe uitzending</div>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8}}>
-                <div>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>DATUM</div>
-                  <input type="date" value={nieuwDatum} onChange={e=>setNieuwDatum(e.target.value)}
-                    style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
-                </div>
-                <div>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>START</div>
-                  <input type="time" value={nieuwStart} onChange={e=>setNieuwStart(e.target.value)}
-                    style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
-                </div>
-                <div>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>EIND</div>
-                  <input type="time" value={nieuwEind} onChange={e=>setNieuwEind(e.target.value)}
-                    style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
-                </div>
-              </div>
-              <div>
-                <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>NAAM (optioneel)</div>
-                <input type="text" value={nieuwNaam} onChange={e=>setNieuwNaam(e.target.value)}
-                  placeholder={nieuwDatum ? formatDatum(nieuwDatum) : "Naam van de uitzending"}
-                  style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
-              </div>
-              <div style={{display:"flex",gap:8,marginTop:4}}>
-                <button onClick={()=>setAanmaken(false)} style={{flex:1,padding:"8px",background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,borderRadius:6,cursor:"pointer",fontSize:12}}>Annuleer</button>
-                <button onClick={handleCreate} disabled={!nieuwDatum} style={{flex:2,padding:"8px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:700,opacity:nieuwDatum?1:0.4}}>Aanmaken</button>
-              </div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8}}><div><div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>DATUM</div><input type="date" value={nieuwDatum} onChange={e=>setNieuwDatum(e.target.value)} style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/></div><div><div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>START</div><input type="time" value={nieuwStart} onChange={e=>setNieuwStart(e.target.value)} style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/></div><div><div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>EIND</div><input type="time" value={nieuwEind} onChange={e=>setNieuwEind(e.target.value)} style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/></div></div>
+              <div><div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>NAAM</div><input type="text" value={nieuwNaam} onChange={e=>setNieuwNaam(e.target.value)} placeholder={nieuwDatum ? formatDatum(nieuwDatum) : "Naam"} style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/></div>
+              <div style={{display:"flex",gap:8}}><button onClick={()=>setAanmaken(false)} style={{flex:1,padding:"8px",background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,borderRadius:6,cursor:"pointer",fontSize:12}}>Annuleer</button><button onClick={()=>{if(nieuwDatum) onCreate({ datum: nieuwDatum, naam: nieuwNaam || formatDatum(nieuwDatum), startTijd: nieuwStart, eindTijd: nieuwEind });}} disabled={!nieuwDatum} style={{flex:2,padding:"8px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:700,opacity:nieuwDatum?1:0.4}}>Aanmaken</button></div>
             </div>
           )}
         </div>
@@ -471,84 +308,37 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
   );
 }
 
-// ════════════════════════════════════════════════════════════
-//  ZoekModal
-// ════════════════════════════════════════════════════════════
 function ZoekModal({ open, onClose, onSelect }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(()=>{ if(open){setQ("");setResults([]);} },[open]);
-
   async function zoek() {
     if (!q.trim()) return;
     setLoading(true); setResults([]);
     try {
-      const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=10&lang=nl_nl`);
+      const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=10`);
       const d = await r.json();
-      setResults((d.results||[]).map(t=>({
-        id:t.trackId, artiest:t.artistName,
-        nummer:t.trackName, album:t.collectionName,
-        duurSec:Math.round((t.trackTimeMillis||0)/1000),
-        cover:t.artworkUrl60,
-      })));
+      setResults((d.results||[]).map(t=>({id:t.trackId, artiest:t.artistName, nummer:t.trackName, album:t.collectionName, duurSec:Math.round((t.trackTimeMillis||0)/1000), cover:t.artworkUrl60})));
     } catch { setResults([{fout:true}]); }
     setLoading(false);
   }
 
   if (!open) return null;
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}
-      onClick={onClose}>
-      <div style={{background:"#fff",borderRadius:10,width:500,maxHeight:"75vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}
-        onClick={e=>e.stopPropagation()}>
-        <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center"}}>
-          <span style={{fontSize:14,fontWeight:700,color:T.text}}>🎵 Zoek nummer via iTunes</span>
-        </div>
-        <div style={{padding:"12px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:8}}>
-          <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&zoek()}
-            placeholder="Artiest + nummer…" autoFocus
-            style={{flex:1,background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,
-              padding:"8px 12px",fontSize:13,borderRadius:6}}/>
-          <button onClick={zoek} style={{padding:"8px 18px",background:BRAND.gradient,border:"none",
-            color:"#fff",borderRadius:6,cursor:"pointer",fontWeight:700,fontSize:13}}>
-            {loading?"…":"Zoek"}
-          </button>
-        </div>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
+      <div style={{background:"#fff",borderRadius:10,width:500,maxHeight:"75vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:14,fontWeight:700,color:T.text}}>🎵 Zoek nummer</span></div>
+        <div style={{padding:"12px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:8}}><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&zoek()} placeholder="Artiest + nummer…" autoFocus style={{flex:1,background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"8px 12px",fontSize:13,borderRadius:6}}/><button onClick={zoek} style={{padding:"8px 18px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:6,cursor:"pointer",fontWeight:700,fontSize:13}}>{loading?"…":"Zoek"}</button></div>
         <div style={{overflowY:"auto",flex:1}}>
-          {results.map((r,i)=>r.fout
-            ? <div key={i} style={{padding:"16px 18px",color:"#EF4444",fontSize:12}}>Zoeken mislukt.</div>
-            : <div key={r.id} onClick={()=>{onSelect(r);onClose();}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.inputBg}
-                onMouseLeave={e=>e.currentTarget.style.background="#fff"}
-                style={{padding:"10px 18px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",
-                  display:"flex",gap:10,alignItems:"center",transition:"background 0.1s"}}>
-                <div style={{width:36,height:36,borderRadius:4,background:T.bg,flexShrink:0,
-                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,overflow:"hidden"}}>
-                  {r.cover?<img src={r.cover} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:"♪"}
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.nummer}</div>
-                  <div style={{fontSize:11,color:T.textMuted}}>{r.artiest}{r.album?` · ${r.album}`:""}</div>
-                </div>
-                <div style={{flexShrink:0,fontSize:13,fontWeight:700,color:r.duurSec?BRAND.paars:T.textLight,fontFamily:"'IBM Plex Mono',monospace"}}>
-                  {r.duurSec?toMMSS(r.duurSec):"?:??"}
-                </div>
-              </div>
-          )}
-          {!loading&&results.length===0&&q&&(
-            <div style={{padding:"24px",color:T.textLight,fontSize:12,textAlign:"center"}}>Nog geen resultaten.</div>
-          )}
+          {results.map((r,i)=>r.fout ? <div key={i} style={{padding:"16px 18px",color:"#EF4444",fontSize:12}}>Zoeken mislukt.</div> : <div key={r.id} onClick={()=>{onSelect(r);onClose();}} onMouseEnter={e=>e.currentTarget.style.background=T.inputBg} onMouseLeave={e=>e.currentTarget.style.background="#fff"} style={{padding:"10px 18px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",display:"flex",gap:10,alignItems:"center",transition:"background 0.1s"}}><div style={{width:36,height:36,borderRadius:4,background:T.bg,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,overflow:"hidden"}}>{r.cover?<img src={r.cover} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:"♪"}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.nummer}</div><div style={{fontSize:11,color:T.textMuted}}>{r.artiest}{r.album?` · ${r.album}`:""}</div></div><div style={{flexShrink:0,fontSize:13,fontWeight:700,color:r.duurSec?BRAND.paars:T.textLight,fontFamily:"'IBM Plex Mono',monospace"}}>{r.duurSec?toMMSS(r.duurSec):"?:??"}</div></div>)}
+          {!loading&&results.length===0&&q&&<div style={{padding:"24px",color:T.textLight,fontSize:12,textAlign:"center"}}>Nog geen resultaten.</div>}
         </div>
       </div>
     </div>
   );
 }
 
-// ════════════════════════════════════════════════════════════
-//  DuurInvoer
-// ════════════════════════════════════════════════════════════
 function DuurInvoer({ item, onChange, onZoek, showZoek=true }) {
   const [val, setVal] = useState(toMMSS(item.duurWerkelijkSec));
   useEffect(()=>setVal(toMMSS(item.duurWerkelijkSec)),[item.duurWerkelijkSec]);
@@ -557,144 +347,50 @@ function DuurInvoer({ item, onChange, onZoek, showZoek=true }) {
   return (
     <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap"}}>
       <span style={{fontSize:10,letterSpacing:1,color:T.textMuted,textTransform:"uppercase",fontWeight:500}}>Duur</span>
-      <input value={val} onChange={e=>setVal(e.target.value)}
-        onBlur={e=>commit(e.target.value)} onKeyDown={e=>e.key==="Enter"&&commit(val)}
-        placeholder="m:ss"
-        style={{width:60,background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,
-          padding:"4px 8px",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",borderRadius:4,textAlign:"center"}}/>
+      <input value={val} onChange={e=>setVal(e.target.value)} onBlur={e=>commit(e.target.value)} onKeyDown={e=>e.key==="Enter"&&commit(val)} placeholder="m:ss" style={{width:60,background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"4px 8px",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",borderRadius:4,textAlign:"center"}}/>
       <span style={{fontSize:11,color:"#2D3444",fontWeight:500}}>gepland: {toMMSS(item.duurGeplandSec)}</span>
-      {Math.abs(drift)>3 && (
-        <span style={{fontSize:11,fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",
-          color:drift>0?"#D97706":"#059669",
-          background:drift>0?"#FEF3C7":"#D1FAE5",
-          padding:"2px 8px",borderRadius:8,border:drift>0?"1px solid #FDE68A":"1px solid #A7F3D0"}}>
-          {drift>0?"+":""}{toMMSS(Math.abs(drift))}
-        </span>
-      )}
-      {showZoek && <button onClick={onZoek}
-        style={{marginLeft:"auto",padding:"4px 12px",fontSize:11,background:"#F3F4F6",
-          border:`1px solid ${T.borderDark}`,color:T.text,borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",fontWeight:500}}>
-        🔍 Zoek nummer
-      </button>}
+      {Math.abs(drift)>3 && <span style={{fontSize:11,fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",color:drift>0?"#D97706":"#059669",background:drift>0?"#FEF3C7":"#D1FAE5",padding:"2px 8px",borderRadius:8,border:drift>0?"1px solid #FDE68A":"1px solid #A7F3D0"}}>{drift>0?"+":""}{toMMSS(Math.abs(drift))}</span>}
+      {showZoek && <button onClick={onZoek} style={{marginLeft:"auto",padding:"4px 12px",fontSize:11,background:"#F3F4F6",border:`1px solid ${T.borderDark}`,color:T.text,borderRadius:4,cursor:"pointer",whiteSpace:"nowrap",fontWeight:500}}>🔍 Zoek</button>}
     </div>
   );
 }
 
-// ════════════════════════════════════════════════════════════
-//  DriftBalk — generiek voor elk uur
-// ════════════════════════════════════════════════════════════
 function DriftBalk({ items, uur, startTijd }) {
   const drift = driftSec(items, uur, startTijd);
   const abs = Math.abs(drift);
   const startSec = timeToSec(startTijd||"12:00");
   const uurEindTijd = addSec("00:00", startSec + uur * 3600);
-  const label = abs<5 ? null : drift>0
-    ? `⚠ +${toMMSS(abs)} te lang — eindigt om ${addSec(uurEindTijd, drift)}`
-    : `↑ ${toMMSS(abs)} te kort — eindigt om ${addSec(uurEindTijd, drift)}`;
-
+  const label = abs<5 ? null : drift>0 ? `⚠ +${toMMSS(abs)} te lang` : `↑ ${toMMSS(abs)} te kort`;
   return (
-    <div style={{marginBottom:12,padding:"8px 12px",borderRadius:6,display:"flex",alignItems:"center",gap:10,
-      background:!label?"#ECFDF5":drift>0?"#FFFBEB":"#EFF6FF",
-      border:`1px solid ${!label?"#A7F3D0":drift>0?"#FDE68A":"#BFDBFE"}`}}>
-      <span style={{fontSize:11,color:!label?"#065F46":drift>0?"#92400E":"#1E40AF",fontWeight:600}}>
-        {label||"✓ Op schema"}
-      </span>
-      {label&&<div style={{flex:1,height:2,background:drift>0?"#FDE68A":"#BFDBFE",borderRadius:2}}>
-        <div style={{height:"100%",borderRadius:2,background:drift>0?"#D97706":"#1D4ED8",
-          width:`${Math.min(100,abs/36*100)}%`}}/>
-      </div>}
+    <div style={{marginBottom:12,padding:"8px 12px",borderRadius:6,display:"flex",alignItems:"center",gap:10,background:!label?"#ECFDF5":drift>0?"#FFFBEB":"#EFF6FF",border:`1px solid ${!label?"#A7F3D0":drift>0?"#FDE68A":"#BFDBFE"}`}}>
+      <span style={{fontSize:11,color:!label?"#065F46":drift>0?"#92400E":"#1E40AF",fontWeight:600}}>{label||"✓ Op schema"}</span>
+      {label&&<div style={{flex:1,height:2,background:drift>0?"#FDE68A":"#BFDBFE",borderRadius:2}}><div style={{height:"100%",borderRadius:2,background:drift>0?"#D97706":"#1D4ED8",width:`${Math.min(100,abs/36*100)}%`}}/></div>}
     </div>
   );
 }
 
-// ════════════════════════════════════════════════════════════
-//  TekstPopup
-// ════════════════════════════════════════════════════════════
 function TekstPopup({ open, label, value, onChange, onClose }) {
   const [voorlees, setVoorlees] = useState(false);
   if (!open) return null;
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center"}}
-      onClick={onClose}>
-      <div style={{background:"#fff",borderRadius:12,width:680,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}
-        onClick={e=>e.stopPropagation()}>
-        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{label}</div>
-          <button onClick={()=>setVoorlees(v=>!v)} style={{
-            padding:"5px 14px",borderRadius:20,border:"1px solid",cursor:"pointer",fontSize:12,fontWeight:600,
-            borderColor:voorlees?BRAND.roze:T.borderDark,
-            background:voorlees?`${BRAND.roze}15`:T.bg,
-            color:voorlees?BRAND.roze:T.textMuted
-          }}>
-            {voorlees ? "📖 Voorlees aan" : "📖 Voorlees uit"}
-          </button>
-          <button onClick={onClose} style={{background:"transparent",border:"none",fontSize:20,cursor:"pointer",color:T.textMuted,marginLeft:4}}>✕</button>
-        </div>
-        <div style={{flex:1,padding:"16px 20px",overflowY:"auto"}}>
-          <textarea
-            value={value||""}
-            onChange={e=>onChange(e.target.value)}
-            autoFocus
-            style={{
-              width:"100%",minHeight:320,
-              background:voorlees?"#FFFDF5":"#fff",
-              border:`1px solid ${T.inputBorder}`,
-              color:T.text,
-              padding:"12px 14px",
-              fontSize: voorlees ? 22 : 13,
-              lineHeight: voorlees ? 2.2 : 1.6,
-              fontFamily: voorlees ? "'Georgia','Times New Roman',serif" : "'IBM Plex Mono',monospace",
-              borderRadius:6,
-              boxSizing:"border-box",
-              resize:"none",
-              outline:"none",
-              transition:"all 0.2s",
-            }}
-          />
-        </div>
-        <div style={{padding:"10px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{fontSize:11,color:T.textMuted,display:"flex",gap:16}}>
-            <span>{(value||"").trim().split(/\s+/).filter(Boolean).length} woorden</span>
-            <span style={{color:BRAND.paars,fontWeight:600}}>
-              ⏱ ~{Math.ceil((value||"").trim().split(/\s+/).filter(Boolean).length / 130 * 60)} sec spreektijd
-            </span>
-          </div>
-          <button onClick={onClose} style={{padding:"7px 20px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600}}>
-            Opslaan & sluiten
-          </button>
-        </div>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
+      <div style={{background:"#fff",borderRadius:12,width:680,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}><div style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{label}</div><button onClick={()=>setVoorlees(v=>!v)} style={{padding:"5px 14px",borderRadius:20,border:"1px solid",cursor:"pointer",fontSize:12,fontWeight:600,borderColor:voorlees?BRAND.roze:T.borderDark,background:voorlees?`${BRAND.roze}15`:T.bg,color:voorlees?BRAND.roze:T.textMuted}}>{voorlees ? "📖 Aan" : "📖 Uit"}</button><button onClick={onClose} style={{background:"transparent",border:"none",fontSize:20,cursor:"pointer",color:T.textMuted,marginLeft:4}}>✕</button></div>
+        <div style={{flex:1,padding:"16px 20px",overflowY:"auto"}}><textarea value={value||""} onChange={e=>onChange(e.target.value)} autoFocus style={{width:"100%",minHeight:320,background:voorlees?"#FFFDF5":"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"12px 14px",fontSize: voorlees ? 22 : 13,lineHeight: voorlees ? 2.2 : 1.6,fontFamily: voorlees ? "'Georgia','Times New Roman',serif" : "'IBM Plex Mono',monospace",borderRadius:6,boxSizing:"border-box",resize:"none",outline:"none"}}/></div>
+        <div style={{padding:"10px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{fontSize:11,color:T.textMuted,display:"flex",gap:16}}><span>{(value||"").trim().split(/\s+/).filter(Boolean).length} woorden</span><span style={{color:BRAND.paars,fontWeight:600}}>⏱ ~{Math.ceil((value||"").trim().split(/\s+/).filter(Boolean).length / 130 * 60)} sec</span></div><button onClick={onClose} style={{padding:"7px 20px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600}}>Opslaan</button></div>
       </div>
     </div>
   );
 }
 
-// ════════════════════════════════════════════════════════════
-//  EditableField
-// ════════════════════════════════════════════════════════════
 function EF({ label, value, onChange, multiline=false, placeholder="", disabled=false }) {
   const [popupOpen, setPopupOpen] = useState(false);
-  const s={width:"100%",background:disabled?"transparent":"rgba(255,255,255,0.7)",border:disabled?"none":`1px solid #9CA3AF`,color:"#0A0C10",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
-    lineHeight:"1.5",borderRadius:4,boxSizing:"border-box",resize:"vertical"};
-  if (disabled) return (
-    <div style={{marginBottom:8}}>
-      {label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}
-      <div style={{...s,whiteSpace:"pre-wrap",color:value?"#0A0C10":"#9CA3AF",minHeight:multiline?40:undefined}}>{value||placeholder}</div>
-    </div>
-  );
+  const s={width:"100%",background:disabled?"transparent":"rgba(255,255,255,0.7)",border:disabled?"none":`1px solid #9CA3AF`,color:"#0A0C10",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",lineHeight:"1.5",borderRadius:4,boxSizing:"border-box",resize:"vertical"};
+  if (disabled) return (<div style={{marginBottom:8}}>{label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}<div style={{...s,whiteSpace:"pre-wrap",color:value?"#0A0C10":"#9CA3AF",minHeight:multiline?40:undefined}}>{value||placeholder}</div></div>);
   return (
-    <div style={{marginBottom:8}}>
-      {label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}
+    <div style={{marginBottom:8}}>{label&&<div style={{fontSize:10,letterSpacing:1,color:"#0A0C10",textTransform:"uppercase",marginBottom:5,fontWeight:700}}>{label}</div>}
       {multiline ? (
-        <div style={{display:"flex",gap:6,alignItems:"flex-start"}}>
-          <button onClick={()=>setPopupOpen(true)} title="Groter bewerken"
-            style={{flexShrink:0,background:"#fff",border:`1px solid ${T.borderDark}`,cursor:"pointer",
-              fontSize:13,color:BRAND.paars,padding:"6px 8px",borderRadius:4,fontWeight:700,lineHeight:1,
-              boxShadow:"0 1px 3px rgba(0,0,0,0.1)",marginTop:1}}>
-            ⛶
-          </button>
-          <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:56,flex:1}}/>
-          <TekstPopup open={popupOpen} label={label} value={value} onChange={onChange} onClose={()=>setPopupOpen(false)}/>
-        </div>
+        <div style={{display:"flex",gap:6,alignItems:"flex-start"}}><button onClick={()=>setPopupOpen(true)} style={{flexShrink:0,background:"#fff",border:`1px solid ${T.borderDark}`,cursor:"pointer",fontSize:13,color:BRAND.paars,padding:"6px 8px",borderRadius:4,fontWeight:700,lineHeight:1,marginTop:1}}>⛶</button><textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...s,minHeight:56,flex:1}}/><TekstPopup open={popupOpen} label={label} value={value} onChange={onChange} onClose={()=>setPopupOpen(false)}/></div>
       ) : (
         <input type="text" value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={s}/>
       )}
@@ -702,10 +398,6 @@ function EF({ label, value, onChange, multiline=false, placeholder="", disabled=
   );
 }
 
-
-// ════════════════════════════════════════════════════════════
-//  InterviewBlok — volledig gastformulier in het draaiboek
-// ════════════════════════════════════════════════════════════
 function InterviewBlok({ item, upd, onDuurChange, readOnly }) {
   const [uitklap, setUitklap] = useState(false);
   const e = item.extra;
@@ -713,46 +405,21 @@ function InterviewBlok({ item, upd, onDuurChange, readOnly }) {
     <>
       <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8}}>
         <EF label="Naam gast" value={e.wie} onChange={v=>upd("wie",v)} placeholder="Volledige naam" disabled={readOnly}/>
-        <EF label="Studio / Telefonisch" value={e.type} onChange={v=>upd("type",v)} placeholder="Studio" disabled={readOnly}/>
-        <EF label="Telefoonnummer" value={e.tel} onChange={v=>upd("tel",v)} placeholder="06-…" disabled={readOnly}/>
+        <EF label="Type" value={e.type} onChange={v=>upd("type",v)} placeholder="Studio" disabled={readOnly}/>
+        <EF label="Telefoon" value={e.tel} onChange={v=>upd("tel",v)} placeholder="06-…" disabled={readOnly}/>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <EF label="Functie" value={e.functie} onChange={v=>upd("functie",v)} placeholder="Functie / rol" disabled={readOnly}/>
-        <EF label="Onderwerp" value={e.onderwerp} onChange={v=>upd("onderwerp",v)} placeholder="Waar gaat het gesprek over?" disabled={readOnly}/>
-      </div>
-      <EF label="Introductietekst" value={e.intro} onChange={v=>upd("intro",v)} multiline placeholder="Schrijf hier de introductietekst…" disabled={readOnly}/>
-      <EF label="Interviewvragen" value={e.vragen} onChange={v=>upd("vragen",v)} multiline placeholder={"1. …\n2. …\n3. …"} disabled={readOnly}/>
-
-      <button onClick={()=>setUitklap(u=>!u)} style={{
-        display:"flex",alignItems:"center",gap:6,padding:"5px 0",
-        background:"transparent",border:"none",cursor:"pointer",
-        fontSize:11,color:T.textMuted,fontWeight:600,marginBottom:4}}>
-        <span style={{fontSize:10}}>{uitklap?"▲":"▼"}</span>
-        {uitklap?"Verberg extra info":"Achtergrond & bronnen"}
-      </button>
-
-      {uitklap&&<>
-        <EF label="Achtergrond informatie" value={e.achtergrond||""} onChange={v=>upd("achtergrond",v)} multiline placeholder="Relevante achtergrond over de gast of het onderwerp…" disabled={readOnly}/>
-        <EF label="Bronnen (links, artikelen, etc.)" value={e.bronnen||""} onChange={v=>upd("bronnen",v)} multiline placeholder={"https://…\nhttps://…"} disabled={readOnly}/>
-      </>}
-
+      <EF label="Introductie" value={e.intro} onChange={v=>upd("intro",v)} multiline placeholder="Introductietekst…" disabled={readOnly}/>
+      <EF label="Vragen" value={e.vragen} onChange={v=>upd("vragen",v)} multiline placeholder="Interviewvragen…" disabled={readOnly}/>
+      <button onClick={()=>setUitklap(u=>!u)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",background:"transparent",border:"none",cursor:"pointer",fontSize:11,color:T.textMuted,fontWeight:600,marginBottom:4}}><span style={{fontSize:10}}>{uitklap?"▲":"▼"}</span>{uitklap?"Verberg":"Toon"}</button>
+      {uitklap&&<><EF label="Achtergrond" value={e.achtergrond||""} onChange={v=>upd("achtergrond",v)} multiline placeholder="Achtergrond…" disabled={readOnly}/><EF label="Bronnen" value={e.bronnen||""} onChange={v=>upd("bronnen",v)} multiline placeholder="Bronnen…" disabled={readOnly}/></>}
       <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
     </>
   );
 }
 
-// ════════════════════════════════════════════════════════════
-//  ItemCard
-// ════════════════════════════════════════════════════════════
-const whoVis = {
-  Eindredactie:  null,
-  Host:          null,
-  Techniek:      ["Techniek","Eindredactie"],
-  Nieuwsredactie:["Nieuwsredactie","Eindredactie"],
-  Muziekredactie:["Muziekredactie","Eindredactie"],
-};
+const whoVis = { Eindredactie: null, Host: null, Techniek: ["Techniek","Eindredactie"], Nieuwsredactie: ["Nieuwsredactie","Eindredactie"], Muziekredactie: ["Muziekredactie","Eindredactie"] };
 
-function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, isActive, isPast, onNaarGasten }) {
+function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, isActive, isPast }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
   const readOnly = false;
@@ -764,142 +431,40 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRena
   const displayNaam = item.extra._naam || item.what;
 
   return (
-    <div style={{display:"flex",alignItems:"flex-start",opacity:dimmed?0.35:1,transition:"opacity 0.3s",
-      outline:isActive?`2px solid ${tc.color}`:"none",outlineOffset:2,
-      borderRadius:6,marginBottom:4,background:isActive?`${tc.color}08`:"transparent"}}>
-
-      <div style={{width:56,flexShrink:0,paddingTop:12,textAlign:"right",paddingRight:10}}>
-        <div style={{fontSize:12,fontFamily:"'IBM Plex Mono',monospace",fontWeight:isActive?700:500,
-          color:isActive?tc.color:tidAfwijkt?"#D97706":"#374151"}}>
-          {item.timeBerekend||item.time}
-        </div>
-        {tidAfwijkt&&<div style={{fontSize:9,color:T.textLight,textDecoration:"line-through",lineHeight:1.2}}>{item.time}</div>}
-        <div style={{fontSize:9,color:"#2D3444",marginTop:1,fontWeight:500}}>{toMMSS(item.duurWerkelijkSec)}</div>
-      </div>
-
+    <div style={{display:"flex",alignItems:"flex-start",opacity:dimmed?0.35:1,transition:"opacity 0.3s",outline:isActive?`2px solid ${tc.color}`:"none",outlineOffset:2,borderRadius:6,marginBottom:4,background:isActive?`${tc.color}08`:"transparent"}}>
+      <div style={{width:56,flexShrink:0,paddingTop:12,textAlign:"right",paddingRight:10}}><div style={{fontSize:12,fontFamily:"'IBM Plex Mono',monospace",fontWeight:isActive?700:500,color:isActive?tc.color:tidAfwijkt?"#D97706":"#374151"}}>{item.timeBerekend||item.time}</div>{tidAfwijkt&&<div style={{fontSize:9,color:T.textLight,textDecoration:"line-through",lineHeight:1.2}}>{item.time}</div>}<div style={{fontSize:9,color:"#2D3444",marginTop:1,fontWeight:500}}>{toMMSS(item.duurWerkelijkSec)}</div></div>
       <div style={{width:3,flexShrink:0,background:tc.color,borderRadius:"2px 0 0 2px",alignSelf:"stretch",marginTop:4,marginBottom:4}}/>
-
-      <div style={{flex:1,background:tc.bg,borderRadius:"0 6px 6px 0",padding:"10px 14px",
-        border:`1px solid ${tc.color}33`,borderLeft:"none",marginTop:4,marginBottom:4,
-        boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:canEdit?8:0,
-          paddingBottom:canEdit?7:0,borderBottom:canEdit?`1px solid ${tc.color}33`:"none"}}>
-          <span style={{fontSize:10,letterSpacing:1,color:tc.color,fontWeight:700,
-            background:`${tc.color}15`,padding:"2px 7px",borderRadius:4}}>{tc.icon} {tc.label}</span>
-          {item.type !== "muziek" && (
-            kanHernoemen ? (
-              <input
-                value={displayNaam}
-                onChange={e=>onRename(item.id, e.target.value)}
-                onClick={e=>e.stopPropagation()}
-                style={{fontSize:13,color:"#0D0F12",fontWeight:600,background:"transparent",
-                  border:"none",borderBottom:"1px dashed #C8CDD5",outline:"none",
-                  padding:"0 2px",minWidth:120,maxWidth:440,
-                  fontFamily:"'Inter','Segoe UI',sans-serif"}}
-              />
-            ) : (
-              <span style={{fontSize:13,color:"#0D0F12",fontWeight:600}}>{displayNaam}</span>
-            )
-          )}
-          <div style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
-            {item.who.map(w=>(
-              <span key={w} style={{fontSize:10,padding:"2px 7px",borderRadius:10,
-                background:`${roleColors[w]||"#6B7280"}18`,color:roleColors[w]||T.textMuted,
-                border:`1px solid ${roleColors[w]||"#6B7280"}33`,fontWeight:500}}>{w}</span>
-            ))}
-            {onDelete&&<button onClick={()=>onDelete(item.id)}
-              style={{fontSize:11,padding:"1px 6px",background:"transparent",border:`1px solid #EF444433`,
-                color:"#EF4444",borderRadius:4,cursor:"pointer",marginLeft:4}}>✕</button>}
-          </div>
+      <div style={{flex:1,background:tc.bg,borderRadius:"0 6px 6px 0",padding:"10px 14px",border:`1px solid ${tc.color}33`,borderLeft:"none",marginTop:4,marginBottom:4,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:canEdit?8:0,paddingBottom:canEdit?7:0,borderBottom:canEdit?`1px solid ${tc.color}33`:"none"}}>
+          <span style={{fontSize:10,letterSpacing:1,color:tc.color,fontWeight:700,background:`${tc.color}15`,padding:"2px 7px",borderRadius:4}}>{tc.icon} {tc.label}</span>
+          {item.type !== "muziek" && (kanHernoemen ? (<input value={displayNaam} onChange={e=>onRename(item.id, e.target.value)} onClick={e=>e.stopPropagation()} style={{fontSize:13,color:"#0D0F12",fontWeight:600,background:"transparent",border:"none",borderBottom:"1px dashed #C8CDD5",outline:"none",padding:"0 2px",minWidth:120,maxWidth:440,fontFamily:"'Inter','Segoe UI',sans-serif"}}/>) : (<span style={{fontSize:13,color:"#0D0F12",fontWeight:600}}>{displayNaam}</span>))}
+          <div style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>{item.who.map(w=>(<span key={w} style={{fontSize:10,padding:"2px 7px",borderRadius:10,background:`${roleColors[w]||"#6B7280"}18`,color:roleColors[w]||T.textMuted,border:`1px solid ${roleColors[w]||"#6B7280"}33`,fontWeight:500}}>{w}</span>))}{onDelete&&<button onClick={()=>onDelete(item.id)} style={{fontSize:11,padding:"1px 6px",background:"transparent",border:`1px solid #EF444433`,color:"#EF4444",borderRadius:4,cursor:"pointer",marginLeft:4}}>✕</button>}</div>
         </div>
-
-        {canEdit&&<>
-          {item.type==="muziek"&&<>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiestnaam" disabled={readOnly}/>
-              <EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Titel" disabled={readOnly}/>
-              {"feitje" in item.extra&&<div style={{gridColumn:"span 2"}}><EF label="Feitje / nieuwtje" value={item.extra.feitje} onChange={v=>{upd("feitje",v); const sec=Math.max(5,Math.ceil(v.trim().split(/\s+/).filter(Boolean).length/130*60)); onDuurChange(item.id,sec);}} multiline placeholder="Showhost vertelt…" disabled={readOnly}/></div>}
-            </div>
-            <DuurInvoer item={item} onChange={onDuurChange} onZoek={()=>onZoek(item.id)}/>
-          </>}
-          {item.type==="tekst"&&<>
-            <EF label="Presentatietekst" value={item.extra.tekst} onChange={v=>{
-              upd("tekst",v);
-              const woorden = v.trim().split(/\s+/).filter(Boolean).length;
-              const sec = Math.max(10, Math.ceil(woorden / 130 * 60));
-              onDuurChange(item.id, sec);
-            }} multiline placeholder="Voer tekst in…" disabled={readOnly}/>
-            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
-          </>}
-          {item.type==="jingle"&&<div style={{fontSize:12,color:"#2D3444",fontStyle:"italic",fontWeight:500,padding:"4px 0"}}>{item.extra.label}</div>}
-          {item.type==="nieuws"&&<>
-            <EF label="Intro" value={item.extra.intro} onChange={v=>upd("intro",v)} placeholder="Spreektekst intro…" disabled={readOnly}/>
-            <EF label="Berichten" value={item.extra.berichten} onChange={v=>upd("berichten",v)} multiline placeholder="Voer nieuwsberichten in…" disabled={readOnly}/>
-            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
-          </>}
-          {item.type==="interview"&&<InterviewBlok item={item} upd={upd} onDuurChange={onDuurChange} readOnly={readOnly}/>}
-          {item.type==="special"&&item.what.includes("LP")&&<>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <EF label="LP / Album" value={item.extra.lp_naam} onChange={v=>upd("lp_naam",v)} placeholder="Albumtitel" disabled={readOnly}/>
-              <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiest" disabled={readOnly}/>
-            </div>
-            <EF label="Tekst over LP" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Uitgebreide beschrijving…" disabled={readOnly}/>
-            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
-          </>}
-          {item.type==="special"&&item.what.includes("Plaat")&&<>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiest" disabled={readOnly}/>
-              <EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Plaattitel" disabled={readOnly}/>
-            </div>
-            <EF label="Verhaal achter de plaat" value={item.extra.verhaal} onChange={v=>upd("verhaal",v)} multiline placeholder="Het verhaal…" disabled={readOnly}/>
-            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
-          </>}
-          {item.type==="special"&&item.what==="Reportage"&&<>
-            <EF label="Omschrijving" value={item.extra.omschrijving} onChange={v=>upd("omschrijving",v)} multiline placeholder="Waar gaat de reportage over?" disabled={readOnly}/>
-            <EF label="Link / bestand" value={item.extra.link} onChange={v=>upd("link",v)} placeholder="URL of bestandsnaam" disabled={readOnly}/>
-            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
-          </>}
-          {item.type==="special"&&!["LP","Plaat","Reportage"].some(w=>item.what.includes(w))&&<>
-            <EF label="Tekst / notitie" value={item.extra.tekst} onChange={v=>upd("tekst",v)} multiline placeholder="Notitie…" disabled={readOnly}/>
-            <DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/>
-          </>}
-        </>}
+        {canEdit&&<>{item.type==="muziek"&&<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiest" disabled={readOnly}/><EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Titel" disabled={readOnly}/></div><DuurInvoer item={item} onChange={onDuurChange} onZoek={()=>onZoek(item.id)}/></>}{item.type==="tekst"&&<><EF label="Tekst" value={item.extra.tekst} onChange={v=>{upd("tekst",v); const woorden = v.trim().split(/\s+/).filter(Boolean).length; const sec = Math.max(10, Math.ceil(woorden / 130 * 60)); onDuurChange(item.id, sec);}} multiline placeholder="Voer tekst in…" disabled={readOnly}/><DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/></>}{item.type==="jingle"&&<div style={{fontSize:12,color:"#2D3444",fontStyle:"italic",fontWeight:500,padding:"4px 0"}}>{item.extra.label}</div>}{item.type==="nieuws"&&<><EF label="Intro" value={item.extra.intro} onChange={v=>upd("intro",v)} placeholder="Intro…" disabled={readOnly}/><EF label="Berichten" value={item.extra.berichten} onChange={v=>upd("berichten",v)} multiline placeholder="Berichten…" disabled={readOnly}/><DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/></>}{item.type==="interview"&&<InterviewBlok item={item} upd={upd} onDuurChange={onDuurChange} readOnly={readOnly}/>}{item.type==="special"&&<><EF label="Tekst" value={item.extra.tekst||""} onChange={v=>upd("tekst",v)} multiline placeholder="Tekst…" disabled={readOnly}/><DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/></>}</>}
       </div>
     </div>
   );
 }
 
-// ════════════════════════════════════════════════════════════
-//  ToevoegenKnop
-// ════════════════════════════════════════════════════════════
 function ToevoegenKnop({ uur, onAdd }) {
   const [open, setOpen] = useState(false);
   const types = [
-    { key:"muziek",    label:"♪ Muziek",    color:typeConfig.muziek.color },
-    { key:"tekst",     label:"✎ Tekst",     color:typeConfig.tekst.color },
-    { key:"nieuws",    label:"📰 Nieuws",   color:typeConfig.nieuws.color },
+    { key:"muziek", label:"♪ Muziek", color:typeConfig.muziek.color },
+    { key:"tekst", label:"✎ Tekst", color:typeConfig.tekst.color },
+    { key:"nieuws", label:"📰 Nieuws", color:typeConfig.nieuws.color },
     { key:"interview", label:"🎙 Interview", color:typeConfig.interview.color },
-    { key:"jingle",    label:"▶ Jingle",    color:typeConfig.jingle.color },
-    { key:"special",   label:"★ Special",   color:typeConfig.special.color },
+    { key:"jingle", label:"▶ Jingle", color:typeConfig.jingle.color },
+    { key:"special", label:"★ Special", color:typeConfig.special.color },
   ];
   return (
     <div style={{marginTop:8,marginBottom:8}}>
       {!open ? (
-        <button onClick={()=>setOpen(true)} style={{
-          width:"100%",padding:"8px",background:"transparent",
-          border:`1px dashed ${T.borderDark}`,color:T.textMuted,
-          borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:500
-        }}>+ Item toevoegen aan uur {uur}</button>
+        <button onClick={()=>setOpen(true)} style={{width:"100%",padding:"8px",background:"transparent",border:`1px dashed ${T.borderDark}`,color:T.textMuted,borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:500}}>+ Item toevoegen</button>
       ) : (
         <div style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:8,padding:"12px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}>
-          <div style={{fontSize:11,color:T.textMuted,marginBottom:10,fontWeight:600}}>Kies type item om toe te voegen aan het einde van uur {uur}:</div>
+          <div style={{fontSize:11,color:T.textMuted,marginBottom:10,fontWeight:600}}>Kies type:</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-            {types.map(t=>(
-              <button key={t.key} onClick={()=>{ onAdd(uur, t.key, "einde"); setOpen(false); }} style={{
-                padding:"5px 14px",borderRadius:20,border:`1px solid ${t.color}44`,
-                background:`${t.color}12`,color:t.color,cursor:"pointer",fontSize:11,fontWeight:600
-              }}>{t.label}</button>
-            ))}
+            {types.map(t=>(<button key={t.key} onClick={()=>{ onAdd(uur, t.key); setOpen(false); }} style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${t.color}44`,background:`${t.color}12`,color:t.color,cursor:"pointer",fontSize:11,fontWeight:600}}>{t.label}</button>))}
           </div>
           <button onClick={()=>setOpen(false)} style={{fontSize:11,color:T.textLight,background:"transparent",border:"none",cursor:"pointer"}}>Annuleer</button>
         </div>
@@ -908,142 +473,57 @@ function ToevoegenKnop({ uur, onAdd }) {
   );
 }
 
-
-// ════════════════════════════════════════════════════════════
-//  TimelinePanel — rechterpaneel met blokjes
-// ════════════════════════════════════════════════════════════
 function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, activeId }) {
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOver, setDragOver] = useState(null);
-
   const uurItems = items.filter(i => i.uur === uur);
-
   function moveItem(fromIdx, toIdx) {
     if (fromIdx === toIdx) return;
     const uurIds = uurItems.map(i => i.id);
     const moved = [...uurIds];
     const [removed] = moved.splice(fromIdx, 1);
     moved.splice(toIdx, 0, removed);
-    const reordered = [
-      ...items.filter(i => i.uur < uur),
-      ...moved.map(id => items.find(i => i.id === id)),
-      ...items.filter(i => i.uur > uur),
-    ];
+    const reordered = [...items.filter(i => i.uur < uur), ...moved.map(id => items.find(i => i.id === id)), ...items.filter(i => i.uur > uur)];
     onReorder(reordered);
   }
-
-  const types = [
-    { key:"muziek",    label:"♪ Muziek" },
-    { key:"tekst",     label:"✎ Tekst" },
-    { key:"nieuws",    label:"📰 Nieuws" },
-    { key:"interview", label:"🎙 Interview" },
-    { key:"jingle",    label:"▶ Jingle" },
-    { key:"special",   label:"★ Special" },
-  ];
-
+  const types = [{ key:"muziek", label:"♪ Muziek" }, { key:"tekst", label:"✎ Tekst" }, { key:"nieuws", label:"📰 Nieuws" }, { key:"interview", label:"🎙 Interview" }, { key:"jingle", label:"▶ Jingle" }, { key:"special", label:"★ Special" }];
   const [showAdd, setShowAdd] = useState(false);
-
   return (
-    <div style={{width:430,flexShrink:0,background:"#F8F9FA",borderLeft:`1px solid ${T.border}`,
-      display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <div style={{padding:"10px 8px 6px",borderBottom:`1px solid ${T.border}`,
-        fontSize:11,letterSpacing:2,color:T.textMuted,fontWeight:600,textTransform:"uppercase"}}>
-        UUR {uur} — BLOKKEN
-      </div>
+    <div style={{width:430,flexShrink:0,background:"#F8F9FA",borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{padding:"10px 8px 6px",borderBottom:`1px solid ${T.border}`,fontSize:11,letterSpacing:2,color:T.textMuted,fontWeight:600,textTransform:"uppercase"}}>UUR {uur}</div>
       <div style={{flex:1,overflowY:"auto",padding:"8px 10px"}}>
         {uurItems.map((item, idx) => {
           const tc = typeConfig[item.type] || typeConfig.tekst;
           const isActive = item.id === activeId;
           return (
-            <div key={item.id}
-              draggable
-              onDragStart={()=>setDragIdx(idx)}
-              onDragOver={e=>{e.preventDefault();setDragOver(idx);}}
-              onDragEnd={()=>{
-                if(dragIdx!==null&&dragOver!==null&&dragIdx!==dragOver) moveItem(dragIdx,dragOver);
-                setDragIdx(null);setDragOver(null);
-              }}
-              style={{
-                marginBottom:5,borderRadius:6,padding:"9px 14px",
-                background:isActive?tc.color:`${tc.color}22`,
-                border:`1px solid ${tc.color}55`,
-                cursor:"grab",
-                opacity:dragIdx===idx?0.4:1,
-                outline:dragOver===idx&&dragIdx!==idx?`2px dashed ${tc.color}`:"none",
-                transition:"opacity 0.15s",
-              }}>
+            <div key={item.id} draggable onDragStart={()=>setDragIdx(idx)} onDragOver={e=>{e.preventDefault();setDragOver(idx);}} onDragEnd={()=>{if(dragIdx!==null&&dragOver!==null&&dragIdx!==dragOver) moveItem(dragIdx,dragOver); setDragIdx(null);setDragOver(null);}} style={{marginBottom:5,borderRadius:6,padding:"9px 14px",background:isActive?tc.color:`${tc.color}22`,border:`1px solid ${tc.color}55`,cursor:"grab",opacity:dragIdx===idx?0.4:1,outline:dragOver===idx&&dragIdx!==idx?`2px dashed ${tc.color}`:"none",transition:"opacity 0.15s"}}>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <span onClick={()=>onScrollTo&&onScrollTo(item.id)}
-                  style={{fontSize:12,flex:1,fontWeight:600,cursor:"pointer",
-                  color:isActive?"#fff":tc.color,
-                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
-                  title="Klik om naar dit blok te scrollen">
-                  {tc.icon} {item.what}
-                </span>
-                <div style={{display:"flex",gap:1,flexShrink:0}}>
-                  <button onClick={()=>moveItem(idx,Math.max(0,idx-1))}
-                    style={{background:"transparent",border:"none",cursor:"pointer",
-                      fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▲</button>
-                  <button onClick={()=>moveItem(idx,Math.min(uurItems.length-1,idx+1))}
-                    style={{background:"transparent",border:"none",cursor:"pointer",
-                      fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▼</button>
-                  <button onClick={()=>onDelete(item.id)}
-                    style={{background:"transparent",border:"none",cursor:"pointer",
-                      fontSize:12,padding:"0 3px",color:isActive?"#ffaaaa":"#EF4444",lineHeight:1}}>✕</button>
-                </div>
+                <span onClick={()=>onScrollTo&&onScrollTo(item.id)} style={{fontSize:12,flex:1,fontWeight:600,cursor:"pointer",color:isActive?"#fff":tc.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tc.icon} {item.what}</span>
+                <div style={{display:"flex",gap:1,flexShrink:0}}><button onClick={()=>moveItem(idx,Math.max(0,idx-1))} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▲</button><button onClick={()=>moveItem(idx,Math.min(uurItems.length-1,idx+1))} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▼</button><button onClick={()=>onDelete(item.id)} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#ffaaaa":"#EF4444",lineHeight:1}}>✕</button></div>
               </div>
-              <div style={{fontSize:11,color:isActive?"rgba(255,255,255,0.8)":T.textLight,marginTop:2}}>
-                {item.timeBerekend||item.time} · {item.duurWerkelijkSec<60?item.duurWerkelijkSec+"s":toMMSS(item.duurWerkelijkSec)}
-              </div>
+              <div style={{fontSize:11,color:isActive?"rgba(255,255,255,0.8)":T.textLight,marginTop:2}}>{item.timeBerekend||item.time} · {item.duurWerkelijkSec<60?item.duurWerkelijkSec+"s":toMMSS(item.duurWerkelijkSec)}</div>
             </div>
           );
         })}
       </div>
-      {/* Toevoegen */}
       <div style={{padding:"6px",borderTop:`1px solid ${T.border}`}}>
         {!showAdd ? (
-          <button onClick={()=>setShowAdd(true)} style={{
-            width:"100%",padding:"6px",background:"transparent",
-            border:`1px dashed ${T.borderDark}`,color:T.textMuted,
-            borderRadius:4,cursor:"pointer",fontSize:12,fontWeight:500}}>
-            + Toevoegen
-          </button>
+          <button onClick={()=>setShowAdd(true)} style={{width:"100%",padding:"6px",background:"transparent",border:`1px dashed ${T.borderDark}`,color:T.textMuted,borderRadius:4,cursor:"pointer",fontSize:12,fontWeight:500}}>+ Toevoegen</button>
         ) : (
-          <div>
-            <div style={{fontSize:11,color:T.textMuted,marginBottom:6,fontWeight:600}}>Type:</div>
-            <div style={{display:"flex",flexDirection:"column",gap:3}}>
-              {types.map(t=>(
-                <button key={t.key} onClick={()=>{ onAdd(uur, t.key); setShowAdd(false); }} style={{
-                  padding:"6px 10px",borderRadius:4,border:`1px solid ${typeConfig[t.key].color}44`,
-                  background:`${typeConfig[t.key].color}12`,color:typeConfig[t.key].color,
-                  cursor:"pointer",fontSize:12,fontWeight:600,textAlign:"left"
-                }}>{t.label}</button>
-              ))}
-            </div>
-            <button onClick={()=>setShowAdd(false)}
-              style={{marginTop:4,fontSize:11,color:T.textLight,background:"transparent",border:"none",cursor:"pointer"}}>
-              Annuleer
-            </button>
-          </div>
+          <div><div style={{fontSize:11,color:T.textMuted,marginBottom:6,fontWeight:600}}>Type:</div><div style={{display:"flex",flexDirection:"column",gap:3}}>{types.map(t=>(<button key={t.key} onClick={()=>{ onAdd(uur, t.key); setShowAdd(false); }} style={{padding:"6px 10px",borderRadius:4,border:`1px solid ${typeConfig[t.key].color}44`,background:`${typeConfig[t.key].color}12`,color:typeConfig[t.key].color,cursor:"pointer",fontSize:12,fontWeight:600,textAlign:"left"}}>{t.label}</button>))}</div><button onClick={()=>setShowAdd(false)} style={{marginTop:4,fontSize:11,color:T.textLight,background:"transparent",border:"none",cursor:"pointer"}}>Annuleer</button></div>
         )}
       </div>
     </div>
   );
 }
 
-// INLOG
-
 function LoginGate() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [fout, setFout] = useState(false);
   const [loading, setLoading] = useState(false);
-  
-  const CORRECT_USERNAME = "RadioredactieMaLive";
-  const CORRECT_PASSWORD = "radiomakenishetmooistedateris";
-  
   const handleSubmit = async () => {
-    if (username === CORRECT_USERNAME && password === CORRECT_PASSWORD) {
+    if (username === "RadioredactieMaLive" && password === "radiomakenishetmooistedateris") {
       setLoading(true);
       try {
         await signInWithEmailAndPassword(auth, "malive@radioprogramma.local", "securepassword123");
@@ -1059,692 +539,190 @@ function LoginGate() {
       setTimeout(() => setFout(false), 2000);
     }
   };
-  
   return (
-    <div style={{
-      position: "fixed",
-      top: 0, left: 0, right: 0, bottom: 0,
-      background: "rgba(0,0,0,0.5)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 9999,
-      fontFamily: "'Inter','Segoe UI',sans-serif"
-    }}>
-      <div style={{
-        background: "#FFFFFF",
-        borderRadius: 12,
-        padding: "40px 32px",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-        maxWidth: 400,
-        textAlign: "center"
-      }}>
-        <div style={{fontSize: 32, fontWeight: 700, color: BRAND.roze, marginBottom: 8}}>MaLive</div>
-        <div style={{fontSize: 14, color: T.textMuted, marginBottom: 24}}>Inloggen</div>
-        
-        <input
-          type="text"
-          value={username}
-          onChange={e => setUsername(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && !loading && handleSubmit()}
-          placeholder="Inlognaam…"
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            fontSize: 16,
-            border: `2px solid ${fout ? "#EF4444" : T.inputBorder}`,
-            borderRadius: 8,
-            marginBottom: 12,
-            boxSizing: "border-box",
-            background: T.inputBg,
-            color: T.text,
-            opacity: loading ? 0.6 : 1,
-            cursor: loading ? "not-allowed" : "text"
-          }}
-          autoFocus
-        />
-        
-        <input
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && !loading && handleSubmit()}
-          placeholder="Wachtwoord…"
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            fontSize: 16,
-            border: `2px solid ${fout ? "#EF4444" : T.inputBorder}`,
-            borderRadius: 8,
-            marginBottom: 16,
-            boxSizing: "border-box",
-            background: T.inputBg,
-            color: T.text,
-            opacity: loading ? 0.6 : 1,
-            cursor: loading ? "not-allowed" : "text"
-          }}
-        />
-        
-        {fout && (
-          <div style={{color: "#EF4444", fontSize: 13, marginBottom: 16, fontWeight: 500}}>Onjuiste inloggegevens.</div>
-        )}
-        
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            fontSize: 14,
-            fontWeight: 600,
-            background: loading ? "#ccc" : BRAND.gradient,
-            color: "white",
-            border: "none",
-            borderRadius: 8,
-            cursor: loading ? "not-allowed" : "pointer",
-            transition: "opacity 0.2s"
-          }}
-          onMouseOver={e => !loading && (e.target.style.opacity = "0.9")}
-          onMouseOut={e => !loading && (e.target.style.opacity = "1")}
-        >
-          {loading ? "Aan het inloggen…" : "Inloggen"}
-        </button>
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,fontFamily:"'Inter','Segoe UI',sans-serif"}}>
+      <div style={{background:"#FFFFFF",borderRadius:12,padding:"40px 32px",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",maxWidth:400,textAlign:"center"}}>
+        <div style={{fontSize:32,fontWeight:700,color:BRAND.roze,marginBottom:8}}>MaLive</div>
+        <div style={{fontSize:14,color:T.textMuted,marginBottom:24}}>Inloggen</div>
+        <input type="text" value={username} onChange={e=>setUsername(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!loading&&handleSubmit()} placeholder="Inlognaam…" disabled={loading} style={{width:"100%",padding:"12px 16px",fontSize:16,border:`2px solid ${fout?"#EF4444":T.inputBorder}`,borderRadius:8,marginBottom:12,boxSizing:"border-box",background:T.inputBg,color:T.text,opacity:loading?0.6:1,cursor:loading?"not-allowed":"text"}} autoFocus/>
+        <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!loading&&handleSubmit()} placeholder="Wachtwoord…" disabled={loading} style={{width:"100%",padding:"12px 16px",fontSize:16,border:`2px solid ${fout?"#EF4444":T.inputBorder}`,borderRadius:8,marginBottom:16,boxSizing:"border-box",background:T.inputBg,color:T.text,opacity:loading?0.6:1,cursor:loading?"not-allowed":"text"}}/>
+        {fout && <div style={{color:"#EF4444",fontSize:13,marginBottom:16,fontWeight:500}}>Onjuiste gegevens.</div>}
+        <button onClick={handleSubmit} disabled={loading} style={{width:"100%",padding:"12px 16px",fontSize:14,fontWeight:600,background:loading?"#ccc":BRAND.gradient,color:"white",border:"none",borderRadius:8,cursor:loading?"not-allowed":"pointer",transition:"opacity 0.2s"}} onMouseOver={e=>!loading&&(e.target.style.opacity="0.9")} onMouseOut={e=>!loading&&(e.target.style.opacity="1")}>{loading?"Aan het inloggen…":"Inloggen"}</button>
       </div>
     </div>
   );
 }
 
-// ════════════════════════════════════════════════════════════
-//  HOOFDAPP
-// ════════════════════════════════════════════════════════════
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
+  useEffect(() => { const unsubscribe = onAuthStateChanged(auth, (user) => { setCurrentUser(user); }); return unsubscribe; }, []);
+  if (!currentUser) return <LoginGate />;
 
-useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, (user) => {
-    setCurrentUser(user);
-  });
-  return unsubscribe;
-}, []);
-
-if (!currentUser) {
-  return <LoginGate />;
-}
   const [uitzendingen, setUitzendingen] = useState([]);
   const [actieveUitzending, setActieveUitzending] = useState(null);
   const [showUitzendingModal, setShowUitzendingModal] = useState(true);
   const [rundown, setRundown] = useState([]);
   const [role, setRole] = useState("Eindredactie");
-  const [tab, setTab] = useState("uur_1"); // "uur_1", "uur_2", ..., "gasten", "redactie"
+  const [tab, setTab] = useState("uur_1");
   const [now, setNow] = useState(new Date());
   const [simTime, setSimTime] = useState("12:00");
   const [useSim, setUseSim] = useState(true);
   const [zoekOpen, setZoekOpen] = useState(false);
   const [zoekId, setZoekId] = useState(null);
-
-
-  const [syncStatus, setSyncStatus] = useState(API_KLAAR ? "laden" : "lokaal");
+  const [syncStatus, setSyncStatus] = useState("lokaal");
   const [highlightId, setHighlightId] = useState(null);
   const itemRefs = useRef({});
 
   const startTijd = cleanTime(actieveUitzending?.startTijd || "12:00");
   const eindTijd = cleanTime(actieveUitzending?.eindTijd || "14:00");
   const aantalUren = actieveUitzending?.aantalUren || 2;
-
-  // Tab-helpers
   const isUurTab = tab.startsWith("uur_");
   const tabUur = isUurTab ? parseInt(tab.split("_")[1]) : 0;
 
-  useEffect(()=>{ const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); },[]);
+  useEffect(() => {
+    const uitzRef = dbRef(db, "uitzendingen");
+    const unsubscribe = onValue(uitzRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const list = Object.values(data).filter(u => u && u.id);
+        setUitzendingen(list);
+        setSyncStatus("ok");
+      } else {
+        setUitzendingen([]);
+        setSyncStatus("ok");
+      }
+    }, (error) => { console.error("Error:", error); setSyncStatus("fout"); });
+    return () => unsubscribe();
+  }, []);
 
-  useEffect(()=>{
-    if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
-    sheetGet("getUitzendingen","").then(res=>{
-      if (res?.ok && res.data?.length) { setUitzendingen(res.data); setSyncStatus("ok"); }
-      else setSyncStatus("fout");
-    });
-  },[]);
-
-  useEffect(()=>{
-    if (!actieveUitzending) return;
+  useEffect(() => {
+    if (!actieveUitzending) { setRundown([]); return; }
+    setSyncStatus("laden");
     const n = actieveUitzending.aantalUren || 2;
     let base = buildBase(startTijd);
-    // Voeg basis-items toe voor extra uren (> 2)
-    for (let u = 3; u <= n; u++) {
-      base = [...base, ...buildUurBase(u, startTijd)];
-    }
+    for (let u = 3; u <= n; u++) base = [...base, ...buildUurBase(u, startTijd)];
     const baseBerekend = herbereken(base, startTijd);
     setRundown(baseBerekend);
-    setSyncStatus("laden");
-    if (!API_KLAAR) { setSyncStatus("lokaal"); return; }
-    sheetGet("getRundown", actieveUitzending.id).then(res=>{
-      if (res?.ok) {
-        isLoading.current = true; // herlaad-debounce overslaan
-        setRundown(prev=>{
-          const savedData = res.data || {};
-          const withData = herbereken(prev.map(item=>{
-            const saved = savedData[item.id] || savedData[String(item.id)];
-            if (!saved) return item;
-            const extra = saved.extra || saved;
-            return { ...item,
-              extra:{...item.extra,...extra},
-              duurWerkelijkSec:saved.duurWerkelijkSec||extra.duurWerkelijkSec||item.duurWerkelijkSec,
-              spotifyUri:saved.spotifyUri||extra.spotifyUri||item.spotifyUri };
-          }), startTijd);
-          // Volgorde herstellen — zit in res.order (niet in res.data)
-          const ids = res.order?.extra?.ids;
-          if (!ids?.length) return withData;
-          const map = Object.fromEntries(withData.map(i=>[String(i.id),i]));
-          const inOrder = ids.map(id=>{
-            const existing = map[String(id)];
-            if (existing) return existing;
-            // Reconstrueer toegevoegde items (niet in buildBase) vanuit opgeslagen data
-            const s = savedData[String(id)];
-            if (s?.type) return {
-              id: Number(id)||id, type:s.type, what:s.what||s.type,
-              who:s.who||[], uur:s.uur||1, extra:s.extra||{},
-              duurGeplandSec:s.duurWerkelijkSec||180,
-              duurWerkelijkSec:s.duurWerkelijkSec||180, spotifyUri:s.spotifyUri||null,
-            };
-            return null;
-          }).filter(Boolean);
-          // Geen 'rest' toevoegen: verwijderde items blijven verwijderd
-          return herbereken(inOrder, startTijd);
-        });
+
+    const rundownRef = dbRef(db, `rundown/${actieveUitzending.id}`);
+    const unsubscribe = onValue(rundownRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const order = data._order?.ids || [];
+        const items = order.map(id => data[String(id)]).filter(item => item && item.id).map(item => ({ id: item.id, type: item.type || "muziek", what: item.what || "Item", who: item.who || [], uur: item.uur || 1, extra: item.extra || {}, duurGeplandSec: item.duurGeplandSec || 180, duurWerkelijkSec: item.duurWerkelijkSec || 180, spotifyUri: item.spotifyUri || null, time: item.time || "00:00" }));
+        if (items.length > 0) setRundown(herbereken(items, startTijd));
         setSyncStatus("ok");
-      } else setSyncStatus("fout");
-    });
-  },[actieveUitzending]);
+      } else setSyncStatus("ok");
+    }, (error) => { console.error("Error:", error); setSyncStatus("fout"); });
+    return () => unsubscribe();
+  }, [actieveUitzending, startTijd]);
 
-  const debouncedRundown = useDebounce(rundown, 1500);
-  const isLoading = useRef(false);
-  const pendingSave = useRef(false);
-  const saveLock = useRef(false);
-  const saveQueue = useRef(null);
-
-  function slaOp(rd) {
-    if (!API_KLAAR || !actieveUitzending) return;
-    if (saveLock.current) { saveQueue.current = rd; return; }
-    saveLock.current = true;
+  const debouncedRundown = useDebounce(rundown, 2000);
+  useEffect(() => {
+    if (!actieveUitzending || rundown.length === 0) return;
     setSyncStatus("opslaan");
-    pendingSave.current = true;
+    saveRundownToDB(actieveUitzending.id, rundown).then(res => { setSyncStatus(res.ok ? "ok" : "fout"); });
+  }, [debouncedRundown, actieveUitzending]);
 
-    const teSlaan = rd.filter(item=>{
-      if (item.duurWerkelijkSec !== item.duurGeplandSec) return true;
-      const e = item.extra || {};
-      if (item.type==="muziek")    return !!(e.artiest||e.nummer);
-      if (item.type==="special")   return !!(e.artiest||e.nummer||e.tekst||e.lp_naam||e.verhaal||e.omschrijving||e.link||e.stem_info);
-      if (e.berichten!==undefined) return !!(e.berichten||e.intro);
-      if (e.wie!==undefined)       return !!(e.wie||e.tel||e.functie||e.intro||e.vragen||e.onderwerp||e.achtergrond||e.bronnen);
-      if (e.tekst!==undefined)     return !!e.tekst;
-      return false;
-    });
-
-    const requests = [
-      { action:"saveRundownItem", uitzendingId:actieveUitzending.id,
-        data:{ itemId:"_order_", extra:{ ids: rd.map(i=>i.id) }, duurWerkelijkSec:0, spotifyUri:null }},
-      ...teSlaan.map(item=>({ action:"saveRundownItem", uitzendingId:actieveUitzending.id,
-        data:{ itemId:item.id, extra:item.extra, duurWerkelijkSec:item.duurWerkelijkSec,
-          spotifyUri:item.spotifyUri, type:item.type, what:item.what, who:item.who, uur:item.uur }}))
-    ];
-
-    (async()=>{
-      const results = [];
-      for (const req of requests) results.push(await sheetPost(req));
-      const ok = results.every(r=>r?.ok);
-      setSyncStatus(ok?"ok":"fout");
-      pendingSave.current = false;
-      saveLock.current = false;
-      if (saveQueue.current) { const next=saveQueue.current; saveQueue.current=null; slaOp(next); }
-    })();
-  }
-
-  useEffect(()=>{
-    if (!API_KLAAR || !actieveUitzending) return;
-    if (isLoading.current) { isLoading.current = false; return; }
-    slaOp(debouncedRundown);
-  },[debouncedRundown]);
-
-  // Waarschuw bij afsluiten als er wijzigingen zijn
-  useEffect(()=>{
-    const handler = (e) => {
-      if (syncStatus==="opslaan"||pendingSave.current) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
-    };
-    window.addEventListener("beforeunload", handler);
-    return ()=>window.removeEventListener("beforeunload", handler);
-  },[syncStatus]);
-
-  async function handleCreate(data) {
-    const id = "uitz_" + Date.now();
-    const nieuw = { id, ...data, aantalUren: 2 };
-    if (API_KLAAR) await sheetPost({ action:"createUitzending", uitzendingId:"", data:nieuw });
-    setUitzendingen(prev=>[...prev, nieuw]);
-    handleSelectUitzending(nieuw);
-  }
-
-  function handleSelectUitzending(u) {
-    isLoading.current = true;
-    setActieveUitzending(u);
-    setSimTime(cleanTime(u.startTijd || "12:00"));
-    setShowUitzendingModal(false);
-    setTab("uur_1");
-  }
-
-  // Verwijder een uitzending (inclusief data in de sheet)
-  function handleDeleteUitzending(id) {
-    setUitzendingen(prev => prev.filter(u => u.id !== id));
-    if (actieveUitzending?.id === id) {
-      setActieveUitzending(null);
-      setRundown([]);
-      setShowUitzendingModal(true);
-    }
-    if (API_KLAAR) sheetPost({ action:"deleteUitzending", uitzendingId:id, data:{} });
-  }
-
-  // Kopieer een uitzending naar een nieuwe datum/naam
-  async function handleCopyUitzending(bronId, { datum, naam }) {
-    const bron = uitzendingen.find(u => u.id === bronId);
-    if (!bron) return;
-    const nieuwId = "uitz_" + Date.now();
-    const kopiee = {
-      id: nieuwId,
-      datum,
-      naam: naam || `Kopie van ${formatUitzendingNaam(bron)}`,
-      startTijd: bron.startTijd || "12:00",
-      eindTijd:  bron.eindTijd  || "14:00",
-      aantalUren: bron.aantalUren || 2,
-    };
-    // copyUitzending maakt de nieuwe uitzending aan én kopieert
-    // alle rundown-, gasten- en redactierijen in één actie
-    if (API_KLAAR) {
-      await sheetPost({ action:"copyUitzending", uitzendingId:bronId, data:kopiee });
-    }
-    setUitzendingen(prev => [...prev, kopiee]);
-    handleSelectUitzending(kopiee);
-  }
-
-  // Voeg een uur toe aan de actieve uitzending
-  function handleVoegUurToe() {
-    if (!actieveUitzending) return;
-    const nieuweUur = aantalUren + 1;
-    const extraItems = buildUurBase(nieuweUur, startTijd);
-    setRundown(prev => herbereken([...prev, ...extraItems], startTijd));
-    const updated = { ...actieveUitzending, aantalUren: nieuweUur };
-    setActieveUitzending(updated);
-    setUitzendingen(prev => prev.map(u => u.id === updated.id ? updated : u));
-    if (API_KLAAR) sheetPost({ action:"updateUitzendingMeta", uitzendingId:actieveUitzending.id, data:{ aantalUren: nieuweUur } });
-    setTab(`uur_${nieuweUur}`);
-  }
-
-  // Verwijder het laatste uur van de actieve uitzending
-  function handleVerwijderLaatsteUur() {
-    if (!actieveUitzending || aantalUren <= 1) return;
-    const uurToRemove = aantalUren;
-    const itemCount = rundown.filter(i => i.uur === uurToRemove).length;
-    if (!window.confirm(`Uur ${uurToRemove} verwijderen? Dit verwijdert ${itemCount} items uit het draaiboek.`)) return;
-    const nieuwRundown = herbereken(rundown.filter(i => i.uur !== uurToRemove), startTijd);
-    setRundown(nieuwRundown);
-    const nieuweAantal = aantalUren - 1;
-    const updated = { ...actieveUitzending, aantalUren: nieuweAantal };
-    setActieveUitzending(updated);
-    setUitzendingen(prev => prev.map(u => u.id === updated.id ? updated : u));
-    if (API_KLAAR) sheetPost({ action:"updateUitzendingMeta", uitzendingId:actieveUitzending.id, data:{ aantalUren: nieuweAantal } });
-    if (tab === `uur_${uurToRemove}`) setTab(`uur_${nieuweAantal}`);
-  }
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
   const curStr = useSim ? simTime : `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
   const curSec = timeToSec(curStr);
   const startSec = timeToSec(startTijd);
-
   function uurStartSec(u) { return startSec + (u - 1) * 3600; }
   function uurLabel(u) { return `${addSec(startTijd,(u-1)*3600)} – ${addSec(startTijd,u*3600)}`; }
   function pct(u) { return Math.min(100,Math.max(0,((curSec - uurStartSec(u)) / 3600) * 100)); }
-
-  function getActiveId(u) {
-    let active=null;
-    rundown.filter(i=>i.uur===u).forEach(item=>{
-      if(timeToSec(item.timeBerekend||item.time)<=curSec) active=item.id;
-    });
-    return active;
-  }
+  function getActiveId(u) { let active=null; rundown.filter(i=>i.uur===u).forEach(item=>{ if(timeToSec(item.timeBerekend||item.time)<=curSec) active=item.id; }); return active; }
 
   function handleUpdate(id, newExtra) { setRundown(prev=>prev.map(r=>r.id===id?{...r,extra:newExtra}:r)); }
-  function handleRename(id, newWhat) {
-    setRundown(prev=>prev.map(r=>r.id===id?{...r,what:newWhat,extra:{...r.extra,_naam:newWhat}}:r));
-  }
+  function handleRename(id, newWhat) { setRundown(prev=>prev.map(r=>r.id===id?{...r,what:newWhat,extra:{...r.extra,_naam:newWhat}}:r)); }
   function handleDuurChange(id, sec) { setRundown(prev=>herbereken(prev.map(r=>r.id===id?{...r,duurWerkelijkSec:sec}:r),startTijd)); }
-  function handleTrackSelect(track) {
-    if (!zoekId) return;
-    setRundown(prev=>herbereken(prev.map(r=>r.id===zoekId?{
-      ...r, duurWerkelijkSec:track.duurSec||r.duurWerkelijkSec, spotifyUri:track.uri,
-      extra:{...r.extra,artiest:track.artiest||r.extra.artiest,nummer:track.nummer||r.extra.nummer},
-    }:r),startTijd));
-  }
-
-  function handleDelete(id) {
-    setRundown(prev=>herbereken(prev.filter(r=>r.id!==id),startTijd));
-  }
-
-  function handleReorder(newItems) {
-    setRundown(herbereken(newItems, startTijd));
-  }
-
-  function scrollToItem(id) {
-    setHighlightId(id);
-    const el = itemRefs.current[id];
-    if (el) el.scrollIntoView({ behavior:"smooth", block:"center" });
-    setTimeout(()=>setHighlightId(null), 2000);
-  }
-
-  function handleAddItem(uur, type, positie="einde") {
-    const typeDefaults = {
-      muziek:    { dur:180, extra:{artiest:"",nummer:"",feitje:""}, who:["Techniek","Muziekredactie"] },
-      tekst:     { dur:60,  extra:{tekst:""},                       who:["Host"] },
-      nieuws:    { dur:300, extra:{intro:"",berichten:""},           who:["Nieuwsredactie"] },
-      interview: { dur:300, extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""},who:["Host"] },
-      jingle:    { dur:5,   extra:{label:"Jingle"},                  who:["Techniek"] },
-      special:   { dur:120, extra:{tekst:""},                        who:["Host"] },
-    };
+  function handleTrackSelect(track) { if (!zoekId) return; setRundown(prev=>herbereken(prev.map(r=>r.id===zoekId?{ ...r, duurWerkelijkSec:track.duurSec||r.duurWerkelijkSec, spotifyUri:track.uri, extra:{...r.extra,artiest:track.artiest||r.extra.artiest,nummer:track.nummer||r.extra.nummer}, }:r),startTijd)); }
+  function handleDelete(id) { setRundown(prev=>herbereken(prev.filter(r=>r.id!==id),startTijd)); }
+  function handleReorder(newItems) { setRundown(herbereken(newItems, startTijd)); }
+  function scrollToItem(id) { setHighlightId(id); const el = itemRefs.current[id]; if (el) el.scrollIntoView({ behavior:"smooth", block:"center" }); setTimeout(()=>setHighlightId(null), 2000); }
+  function handleAddItem(uur, type) {
+    const typeDefaults = { muziek: { dur:180, extra:{artiest:"",nummer:"",feitje:""}, who:["Techniek","Muziekredactie"] }, tekst: { dur:60, extra:{tekst:""}, who:["Host"] }, nieuws: { dur:300, extra:{intro:"",berichten:""}, who:["Nieuwsredactie"] }, interview: { dur:300, extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""}, who:["Host"] }, jingle: { dur:5, extra:{label:"Jingle"}, who:["Techniek"] }, special: { dur:120, extra:{tekst:""}, who:["Host"] } };
     const def = typeDefaults[type] || typeDefaults.tekst;
-    const newItem = {
-      id: Date.now(),
-      time: "00:00",
-      type,
-      what: type.charAt(0).toUpperCase() + type.slice(1),
-      who: def.who,
-      extra: def.extra,
-      uur,
-      duurGeplandSec: def.dur,
-      duurWerkelijkSec: def.dur,
-      spotifyUri: null,
-    };
-    setRundown(prev => {
-      const items = [...prev];
-      const uurItems = items.filter(i=>i.uur===uur);
-      const insertAfterIdx = positie === "einde"
-        ? items.lastIndexOf(uurItems[uurItems.length-1])
-        : items.indexOf(uurItems[positie]);
-      items.splice(insertAfterIdx+1, 0, newItem);
-      return herbereken(items, startTijd);
-    });
+    const newItem = { id: Date.now(), time: "00:00", type, what: type.charAt(0).toUpperCase() + type.slice(1), who: def.who, extra: def.extra, uur, duurGeplandSec: def.dur, duurWerkelijkSec: def.dur, spotifyUri: null };
+    setRundown(prev => { const items = [...prev]; const uurItems = items.filter(i=>i.uur===uur); const insertAfterIdx = items.lastIndexOf(uurItems[uurItems.length-1]); items.splice(insertAfterIdx+1, 0, newItem); return herbereken(items, startTijd); });
   }
+  async function handleCreate(data) { const id = await createUitzendingInDB(data); if (id) { const nieuw = { id, ...data, aantalUren: 2 }; handleSelectUitzending(nieuw); } }
+  function handleSelectUitzending(u) { setActieveUitzending(u); setSimTime(cleanTime(u.startTijd || "12:00")); setShowUitzendingModal(false); setTab("uur_1"); }
+  function handleDeleteUitzending(id) { setUitzendingen(prev => prev.filter(u => u.id !== id)); if (actieveUitzending?.id === id) { setActieveUitzending(null); setRundown([]); setShowUitzendingModal(true); } deleteUitzendingFromDB(id); }
+  async function handleCopyUitzending(bronId, { datum, naam }) {
+    const bron = uitzendingen.find(u => u.id === bronId);
+    if (!bron) return;
+    const nieuwId = "uitz_" + Date.now();
+    const kopiee = { id: nieuwId, datum, naam: naam || `Kopie van ${formatUitzendingNaam(bron)}`, startTijd: bron.startTijd || "12:00", eindTijd: bron.eindTijd || "14:00", aantalUren: bron.aantalUren || 2 };
+    const uitzRef = dbRef(db, `uitzendingen/${nieuwId}`);
+    await set(uitzRef, kopiee);
+    const oldRundownRef = dbRef(db, `rundown/${bronId}`);
+    const newRundownRef = dbRef(db, `rundown/${nieuwId}`);
+    const snapshot = await get(oldRundownRef);
+    if (snapshot.exists()) await set(newRundownRef, snapshot.val());
+    handleSelectUitzending(kopiee);
+  }
+  function handleVoegUurToe() { if (!actieveUitzending) return; const nieuweUur = aantalUren + 1; const extraItems = buildUurBase(nieuweUur, startTijd); setRundown(prev => herbereken([...prev, ...extraItems], startTijd)); const updated = { ...actieveUitzending, aantalUren: nieuweUur }; setActieveUitzending(updated); const uitzRef = dbRef(db, `uitzendingen/${updated.id}`); set(uitzRef, updated); setTab(`uur_${nieuweUur}`); }
+  function handleVerwijderLaatsteUur() { if (!actieveUitzending || aantalUren <= 1) return; const uurToRemove = aantalUren; const itemCount = rundown.filter(i => i.uur === uurToRemove).length; if (!window.confirm(`Uur ${uurToRemove} verwijderen? Dit verwijdert ${itemCount} items.`)) return; const nieuwRundown = herbereken(rundown.filter(i => i.uur !== uurToRemove), startTijd); setRundown(nieuwRundown); const nieuweAantal = aantalUren - 1; const updated = { ...actieveUitzending, aantalUren: nieuweAantal }; setActieveUitzending(updated); const uitzRef = dbRef(db, `uitzendingen/${updated.id}`); set(uitzRef, updated); if (tab === `uur_${uurToRemove}`) setTab(`uur_${nieuweAantal}`); }
 
-  // Dynamische sidebar-tabs
-  const uurTabs = Array.from({length: aantalUren}, (_, i) => ({
-    id: `uur_${i+1}`,
-    l: `UUR ${i+1}`,
-    s: uurLabel(i+1),
-  }));
-  const allTabs = [
-    ...uurTabs,
-    { id:"redactie", l:"REDACTIE", s:"" },
-  ];
-
+  const uurTabs = Array.from({length: aantalUren}, (_, i) => ({ id: `uur_${i+1}`, l: `UUR ${i+1}`, s: uurLabel(i+1) }));
+  const allTabs = [...uurTabs, { id:"redactie", l:"REDACTIE", s:"" }];
   const currentItems = isUurTab ? rundown.filter(i => i.uur === tabUur) : [];
 
   return (
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
       <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23FF00E7'/><text y='72' x='50' text-anchor='middle' font-size='62' font-family='serif'>📻</text></svg>"/>
-      <style>{`
-        input::placeholder, textarea::placeholder { color: #555E6E !important; font-style: italic; }
-        input:not([value=""]), textarea:not(:empty) { color: #1A1D23; }
-      `}</style>
+      <style>{`input::placeholder, textarea::placeholder { color: #555E6E !important; font-style: italic; }`}</style>
 
-      {/* Header */}
       <div style={{background:T.bgHeader,borderBottom:`1px solid ${T.border}`,padding:"0 20px",display:"flex",alignItems:"center",height:56,gap:16,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{background:BRAND.gradient,borderRadius:8,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:13,color:"#fff"}}>MA</div>
-          <div>
-            <div style={{fontSize:15,fontWeight:700,color:T.text,lineHeight:1}}>MaLive</div>
-            <div style={{fontSize:9,color:T.textMuted,letterSpacing:2,textTransform:"uppercase",lineHeight:1.4}}>Draaiboek</div>
-          </div>
-        </div>
-
-        {actieveUitzending && (
-          <button onClick={()=>setShowUitzendingModal(true)} style={{
-            marginLeft:8,padding:"5px 14px",background:T.bg,border:`1px solid ${T.border}`,
-            borderRadius:20,cursor:"pointer",display:"flex",alignItems:"center",gap:8,boxShadow:"0 1px 2px rgba(0,0,0,0.05)"
-          }}>
-            <span style={{fontSize:12,color:T.text,fontWeight:600}}>{formatUitzendingNaam(actieveUitzending)}</span>
-            <span style={{fontSize:11,color:T.textMuted}}>{cleanTime(startTijd)}–{cleanTime(eindTijd)}</span>
-            <span style={{fontSize:10,color:BRAND.roze}}>▼</span>
-          </button>
-        )}
-
+        <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{background:BRAND.gradient,borderRadius:8,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:13,color:"#fff"}}>MA</div><div><div style={{fontSize:15,fontWeight:700,color:T.text,lineHeight:1}}>MaLive</div><div style={{fontSize:9,color:T.textMuted,letterSpacing:2,textTransform:"uppercase",lineHeight:1.4}}>Draaiboek</div></div></div>
+        {actieveUitzending && (<button onClick={()=>setShowUitzendingModal(true)} style={{marginLeft:8,padding:"5px 14px",background:T.bg,border:`1px solid ${T.border}`,borderRadius:20,cursor:"pointer",display:"flex",alignItems:"center",gap:8,boxShadow:"0 1px 2px rgba(0,0,0,0.05)"}}><span style={{fontSize:12,color:T.text,fontWeight:600}}>{formatUitzendingNaam(actieveUitzending)}</span><span style={{fontSize:11,color:T.textMuted}}>{cleanTime(startTijd)}–{cleanTime(eindTijd)}</span><span style={{fontSize:10,color:BRAND.roze}}>▼</span></button>)}
         <div style={{flex:1}}/>
         <SyncBadge status={syncStatus}/>
-        {actieveUitzending && API_KLAAR && syncStatus!=="lokaal" && (
-          <button onClick={()=>slaOp(rundown)}
-            style={{padding:"4px 10px",fontSize:10,fontWeight:700,borderRadius:4,cursor:"pointer",
-              background:syncStatus==="fout"?"#EF4444":BRAND.paars,color:"#fff",border:"none"}}>
-            💾 Nu opslaan
-          </button>
-        )}
-        <div style={{fontSize:14,color:T.text,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>
-          {String(now.getHours()).padStart(2,"0")}:{String(now.getMinutes()).padStart(2,"0")}:{String(now.getSeconds()).padStart(2,"0")}
-        </div>
+        <div style={{fontSize:14,color:T.text,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>{String(now.getHours()).padStart(2,"0")}:{String(now.getMinutes()).padStart(2,"0")}:{String(now.getSeconds()).padStart(2,"0")}</div>
       </div>
 
-      {/* Rolbalk */}
       <div style={{background:T.bgHeader,borderBottom:`1px solid ${T.border}`,padding:"6px 20px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
         <span style={{fontSize:10,letterSpacing:1,color:T.textMuted,fontWeight:600,marginRight:4}}>ROL</span>
-        {["Eindredactie","Host","Techniek","Nieuwsredactie","Muziekredactie"].map(r=>(
-          <button key={r} onClick={()=>setRole(r)} style={{padding:"4px 12px",borderRadius:20,border:"1px solid",
-            fontSize:11,cursor:"pointer",transition:"all 0.15s",
-            borderColor:role===r?roleColors[r]:T.border,
-            background:role===r?`${roleColors[r]}15`:T.bg,
-            color:role===r?roleColors[r]:"#1A1F2B",fontWeight:role===r?600:500}}>{r}</button>
-        ))}
+        {["Eindredactie","Host","Techniek","Nieuwsredactie","Muziekredactie"].map(r=>(<button key={r} onClick={()=>setRole(r)} style={{padding:"4px 12px",borderRadius:20,border:"1px solid",fontSize:11,cursor:"pointer",transition:"all 0.15s",borderColor:role===r?roleColors[r]:T.border,background:role===r?`${roleColors[r]}15`:T.bg,color:role===r?roleColors[r]:"#1A1F2B",fontWeight:role===r?600:500}}>{r}</button>))}
         <div style={{flex:1}}/>
         <span style={{fontSize:10,color:"#1F2937",letterSpacing:1,fontWeight:500}}>SIM</span>
-        <input type="time" value={simTime} onChange={e=>setSimTime(e.target.value)}
-          style={{background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"3px 8px",fontSize:11,borderRadius:4}}/>
-        <button onClick={()=>setUseSim(s=>!s)} style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,
-          background:useSim?`${BRAND.roze}15`:T.bg,border:`1px solid ${useSim?BRAND.roze:T.border}`,
-          color:useSim?BRAND.roze:"#1F2937"}}>{useSim?"SIM AAN":"SIM UIT"}</button>
+        <input type="time" value={simTime} onChange={e=>setSimTime(e.target.value)} style={{background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"3px 8px",fontSize:11,borderRadius:4}}/>
+        <button onClick={()=>setUseSim(s=>!s)} style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,background:useSim?`${BRAND.roze}15`:T.bg,border:`1px solid ${useSim?BRAND.roze:T.border}`,color:useSim?BRAND.roze:"#1F2937"}}>{useSim?"SIM AAN":"SIM UIT"}</button>
       </div>
 
       <div style={{display:"flex",height:"calc(100vh - 100px)",overflow:"hidden",position:"relative"}}>
-        {/* Laad-overlay */}
-        {syncStatus==="laden" && actieveUitzending && (
-          <div style={{position:"absolute",inset:0,background:"rgba(255,255,255,0.75)",zIndex:50,
-            display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}>
-            <div style={{background:"#fff",padding:"20px 32px",borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,0.12)",
-              textAlign:"center",fontSize:13,color:T.textMuted,fontWeight:600}}>
-              ⏳ Draaiboek wordt geladen…
-            </div>
-          </div>
-        )}
-        {/* Sidebar */}
+        {syncStatus==="laden" && actieveUitzending && (<div style={{position:"absolute",inset:0,background:"rgba(255,255,255,0.75)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(2px)"}}><div style={{background:"#fff",padding:"20px 32px",borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,0.12)",textAlign:"center",fontSize:13,color:T.textMuted,fontWeight:600}}>⏳ Laden…</div></div>)}
+        
         <div style={{width:180,background:T.bgSidebar,borderRight:`1px solid ${T.border}`,flexShrink:0,overflowY:"auto"}}>
           <div style={{paddingTop:8}}>
-            {allTabs.map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)} style={{width:"100%",textAlign:"left",padding:"10px 16px",
-                background:tab===t.id?"#F9FAFB":"transparent",border:"none",
-                borderLeft:`3px solid ${tab===t.id?BRAND.roze:"transparent"}`,
-                color:tab===t.id?"#0A0C10":"#1A1F2B",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400}}>
-                <div>{t.l}</div>
-                {t.s&&<div style={{fontSize:10,color:T.textLight,marginTop:1}}>{t.s}</div>}
-              </button>
-            ))}
+            {allTabs.map(t=>(<button key={t.id} onClick={()=>setTab(t.id)} style={{width:"100%",textAlign:"left",padding:"10px 16px",background:tab===t.id?"#F9FAFB":"transparent",border:"none",borderLeft:`3px solid ${tab===t.id?BRAND.roze:"transparent"}`,color:tab===t.id?"#0A0C10":"#1A1F2B",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400}}><div>{t.l}</div>{t.s&&<div style={{fontSize:10,color:T.textLight,marginTop:1}}>{t.s}</div>}</button>))}
           </div>
-
-          {/* Uren beheren (alleen Eindredactie) */}
-          {role==="Eindredactie" && actieveUitzending && (
-            <div style={{padding:"10px 12px",borderTop:`1px solid ${T.border}`,marginTop:4,display:"flex",flexDirection:"column",gap:4}}>
-              <div style={{fontSize:9,letterSpacing:2,color:T.textLight,marginBottom:4,fontWeight:600,textTransform:"uppercase"}}>Uren</div>
-              <button onClick={handleVoegUurToe}
-                style={{padding:"5px 8px",fontSize:11,background:`${BRAND.roze}10`,border:`1px solid ${BRAND.roze}44`,
-                  color:BRAND.roze,borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>
-                + Uur toevoegen
-              </button>
-              {aantalUren > 1 && (
-                <button onClick={handleVerwijderLaatsteUur}
-                  style={{padding:"5px 8px",fontSize:11,background:"#FEF2F2",border:"1px solid #FECACA",
-                    color:"#EF4444",borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>
-                  − Uur {aantalUren} verwijderen
-                </button>
-              )}
-            </div>
-          )}
-
-          <div style={{padding:"12px 16px 0",marginTop:8,borderTop:`1px solid ${T.border}`}}>
-            <div style={{fontSize:9,letterSpacing:2,color:T.textLight,marginBottom:8,fontWeight:600}}>LEGENDA</div>
-            {Object.entries(typeConfig).map(([k,v])=>(
-              <div key={k} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
-                <div style={{width:3,height:11,background:v.color,borderRadius:2}}/>
-                <span style={{fontSize:11,color:"#1A1F2B",fontWeight:500}}>{v.label}</span>
-              </div>
-            ))}
-          </div>
+          {role==="Eindredactie" && actieveUitzending && (<div style={{padding:"10px 12px",borderTop:`1px solid ${T.border}`,marginTop:4,display:"flex",flexDirection:"column",gap:4}}><div style={{fontSize:9,letterSpacing:2,color:T.textLight,marginBottom:4,fontWeight:600,textTransform:"uppercase"}}>Uren</div><button onClick={handleVoegUurToe} style={{padding:"5px 8px",fontSize:11,background:`${BRAND.roze}10`,border:`1px solid ${BRAND.roze}44`,color:BRAND.roze,borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>+ Uur toevoegen</button>{aantalUren > 1 && (<button onClick={handleVerwijderLaatsteUur} style={{padding:"5px 8px",fontSize:11,background:"#FEF2F2",border:"1px solid #FECACA",color:"#EF4444",borderRadius:4,cursor:"pointer",fontWeight:600,textAlign:"left"}}>− Uur {aantalUren}</button>)}</div>)}
+          <div style={{padding:"12px 16px 0",marginTop:8,borderTop:`1px solid ${T.border}`}}><div style={{fontSize:9,letterSpacing:2,color:T.textLight,marginBottom:8,fontWeight:600}}>LEGENDA</div>{Object.entries(typeConfig).map(([k,v])=>(<div key={k} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}><div style={{width:3,height:11,background:v.color,borderRadius:2}}/><span style={{fontSize:11,color:"#1A1F2B",fontWeight:500}}>{v.label}</span></div>))}</div>
         </div>
 
-        {/* Inhoud + panel */}
         <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-        <div style={{flex:1,overflowY:"auto",padding:"16px 24px",background:T.bg}}>
-          {!actieveUitzending && (
-            <div style={{textAlign:"center",padding:"60px 20px",color:T.textMuted}}>
-              <div style={{fontSize:40,marginBottom:16}}>📻</div>
-              <div style={{fontSize:16,fontWeight:600,color:T.text,marginBottom:8}}>Geen uitzending gekozen</div>
-              <div style={{fontSize:13,marginBottom:20}}>Kies of maak een uitzending aan om te beginnen.</div>
-              <button onClick={()=>setShowUitzendingModal(true)} style={{padding:"10px 24px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}}>
-                Uitzending kiezen
-              </button>
-            </div>
-          )}
-
-          {actieveUitzending && isUurTab && <>
-            <div style={{marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                <span style={{fontSize:11,color:T.textMuted,fontWeight:500}}>
-                  UUR {tabUur} — {uurLabel(tabUur)}
-                </span>
-                {curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur) + 3600 && (
-                  <span style={{fontSize:11,color:BRAND.roze,fontWeight:700,background:`${BRAND.roze}15`,padding:"2px 10px",borderRadius:10}}>▶ LIVE {curStr}</span>
-                )}
+          <div style={{flex:1,overflowY:"auto",padding:"16px 24px",background:T.bg}}>
+            {!actieveUitzending && (<div style={{textAlign:"center",padding:"60px 20px",color:T.textMuted}}><div style={{fontSize:40,marginBottom:16}}>📻</div><div style={{fontSize:16,fontWeight:600,color:T.text,marginBottom:8}}>Geen uitzending gekozen</div><div style={{fontSize:13,marginBottom:20}}>Kies of maak een uitzending aan.</div><button onClick={()=>setShowUitzendingModal(true)} style={{padding:"10px 24px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}}>Uitzending kiezen</button></div>)}
+            {actieveUitzending && isUurTab && <>
+              <div style={{marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><span style={{fontSize:11,color:T.textMuted,fontWeight:500}}>UUR {tabUur} — {uurLabel(tabUur)}</span>{curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur) + 3600 && (<span style={{fontSize:11,color:BRAND.roze,fontWeight:700,background:`${BRAND.roze}15`,padding:"2px 10px",borderRadius:10}}>▶ LIVE {curStr}</span>)}</div>
+                <div style={{height:4,background:T.border,borderRadius:2}}><div style={{height:"100%",borderRadius:2,background:BRAND.gradient,transition:"width 1s linear",width:`${pct(tabUur)}%`}}/></div>
               </div>
-              <div style={{height:4,background:T.border,borderRadius:2}}>
-                <div style={{height:"100%",borderRadius:2,background:BRAND.gradient,transition:"width 1s linear",width:`${pct(tabUur)}%`}}/>
-              </div>
-            </div>
-            <DriftBalk items={rundown} uur={tabUur} startTijd={startTijd}/>
-            {currentItems.map(item=>(
-              <div key={item.id} ref={el=>itemRefs.current[item.id]=el}
-                style={{scrollMarginTop:12, outline:highlightId===item.id?"2px solid #FF00E7":"none", outlineOffset:2, borderRadius:6, transition:"outline 0.3s"}}>
-                <ItemCard item={item} role={role}
-                  onUpdate={handleUpdate} onDuurChange={handleDuurChange}
-                  onRename={handleRename}
-                  onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
-                  onDelete={role==="Eindredactie"?handleDelete:null}
-                  isActive={getActiveId(tabUur)===item.id}
-                  isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
-              </div>
-            ))}
-            {role==="Eindredactie" && <ToevoegenKnop uur={tabUur} onAdd={handleAddItem}/>}
-          </>}
-
-          {actieveUitzending && tab==="redactie" && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
-        </div>
-        {/* Timeline panel — alleen bij uur-tabs */}
-        {actieveUitzending && isUurTab && role==="Eindredactie" && (
-          <TimelinePanel
-            items={rundown}
-            uur={tabUur}
-            activeId={getActiveId(tabUur)}
-            onReorder={handleReorder}
-            onDelete={handleDelete}
-            onAdd={(uur,type)=>handleAddItem(uur,type,"einde")}
-            onScrollTo={scrollToItem}
-          />
-        )}
+              <DriftBalk items={rundown} uur={tabUur} startTijd={startTijd}/>
+              {currentItems.map(item=>(<div key={item.id} ref={el=>itemRefs.current[item.id]=el} style={{scrollMarginTop:12, outline:highlightId===item.id?"2px solid #FF00E7":"none", outlineOffset:2, borderRadius:6, transition:"outline 0.3s"}}><ItemCard item={item} role={role} onUpdate={handleUpdate} onDuurChange={handleDuurChange} onRename={handleRename} onZoek={id=>{setZoekId(id);setZoekOpen(true);}} onDelete={role==="Eindredactie"?handleDelete:null} isActive={getActiveId(tabUur)===item.id} isPast={timeToSec(item.timeBerekend||item.time)<curSec}/></div>))}
+              {role==="Eindredactie" && <ToevoegenKnop uur={tabUur} onAdd={handleAddItem}/>}
+            </>}
+          </div>
+          {actieveUitzending && isUurTab && role==="Eindredactie" && (<TimelinePanel items={rundown} uur={tabUur} activeId={getActiveId(tabUur)} onReorder={handleReorder} onDelete={handleDelete} onAdd={(uur,type)=>handleAddItem(uur,type)} onScrollTo={scrollToItem}/>)}
         </div>
       </div>
 
-      <UitzendingModal
-        open={showUitzendingModal}
-        uitzendingen={uitzendingen}
-        onSelect={handleSelectUitzending}
-        onCreate={handleCreate}
-        onClose={uitzendingen.length>0?()=>setShowUitzendingModal(false):null}
-        onDelete={handleDeleteUitzending}
-        onCopy={handleCopyUitzending}
-      />
-      <ZoekModal open={zoekOpen} onClose={()=>setZoekOpen(false)}
-        onSelect={handleTrackSelect}/>
-    </div>
-  );
-}
-
-
-// ════════════════════════════════════════════════════════════
-//  RedactieTab
-// ════════════════════════════════════════════════════════════
-function RedactieTab({ uitzendingId, setSyncStatus }) {
-  const [redactie, setRedactie] = useState([
-    {functie:"Eindredactie",taak:"Host 1 / Host 2 / Techniek",produceert:"De plaat en zijn verhaal",namen:[""]},
-    {functie:"Nieuwsredactie",taak:"Nieuwslezer",produceert:"Nieuws, Amsterdams nieuws",namen:[""]},
-    {functie:"Interviewredactie",taak:"Interviewer",produceert:"Foto geïnterviewde",namen:[""]},
-    {functie:"Muziekredactie",taak:"New Music / LP van de dag",produceert:"New Music overzicht",namen:[""]},
-    {functie:"Reportageredactie",taak:"",produceert:"Reportage inclusief foto's",namen:[""]},
-    {functie:"Webredactie",taak:"Regisseur / Cameraregie",produceert:"MaLive redactie",namen:[""]},
-  ]);
-
-  useEffect(()=>{
-    if(!API_KLAAR) return;
-    sheetGet("getRedactie",uitzendingId).then(r=>{
-      if(r?.ok&&r.data?.length) {
-        // Backward compat: naam (string) → namen (array)
-        setRedactie(r.data.map(x=>({...x, namen: x.namen||(x.naam?[x.naam]:[""])})));
-      }
-    });
-  },[uitzendingId]);
-
-  const db=useDebounce(redactie,1000);
-  const first=useRef(true);
-  useEffect(()=>{
-    if(!API_KLAAR) return;
-    if(first.current){first.current=false;return;}
-    setSyncStatus("opslaan");
-    sheetPost({action:"saveRedactie",uitzendingId,data:db}).then(r=>setSyncStatus(r?.ok?"ok":"fout"));
-  },[db]);
-
-  const updNaam=(i,j,v)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:r.namen.map((n,ni)=>ni===j?v:n)}));
-  const addNaam=(i)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:[...r.namen,""]}));
-  const delNaam=(i,j)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:r.namen.filter((_,ni)=>ni!==j)||[""]}));
-
-  return (
-    <div>
-      <div style={{fontSize:11,letterSpacing:2,color:T.textMuted,marginBottom:14,fontWeight:600,textTransform:"uppercase"}}>Redactie & Rolverdeling</div>
-      {redactie.map((r,i)=>(
-        <div key={i} style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:6,padding:"12px 16px",marginBottom:6,
-          display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1.2fr",gap:12,alignItems:"start",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
-          <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>FUNCTIE</div><div style={{fontSize:13,color:T.text,fontWeight:600}}>{r.functie}</div></div>
-          <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>ROL</div><div style={{fontSize:12,color:T.textMuted}}>{r.taak||"—"}</div></div>
-          <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>PRODUCEERT</div><div style={{fontSize:11,color:T.textMuted}}>{r.produceert}</div></div>
-          <div>
-            <div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:4,fontWeight:600}}>WIE</div>
-            {(r.namen||[""]).map((n,j)=>(
-              <div key={j} style={{display:"flex",gap:4,marginBottom:4}}>
-                <input value={n} onChange={e=>updNaam(i,j,e.target.value)} placeholder="Naam…"
-                  style={{flex:1,padding:"5px 8px",fontSize:12,border:`1px solid ${T.inputBorder}`,
-                    borderRadius:5,background:T.inputBg,color:T.text}}/>
-                {r.namen.length>1&&(
-                  <button onClick={()=>delNaam(i,j)} style={{padding:"4px 7px",fontSize:11,border:`1px solid ${T.border}`,
-                    borderRadius:5,background:"transparent",color:"#EF4444",cursor:"pointer"}}>×</button>
-                )}
-              </div>
-            ))}
-            <button onClick={()=>addNaam(i)} style={{fontSize:10,color:BRAND.paars,background:"transparent",
-              border:"none",cursor:"pointer",padding:"0 2px",fontWeight:600}}>+ naam toevoegen</button>
-          </div>
-        </div>
-      ))}
+      <UitzendingModal open={showUitzendingModal} uitzendingen={uitzendingen} onSelect={handleSelectUitzending} onCreate={handleCreate} onClose={uitzendingen.length>0?()=>setShowUitzendingModal(false):null} onDelete={handleDeleteUitzending} onCopy={handleCopyUitzending}/>
+      <ZoekModal open={zoekOpen} onClose={()=>setZoekOpen(false)} onSelect={handleTrackSelect}/>
     </div>
   );
 }
