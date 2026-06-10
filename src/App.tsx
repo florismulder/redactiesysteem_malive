@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref as dbRef, set, get, onValue, update, remove } from "firebase/database";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 
 // ════════════════════════════════════════════════════════════
 //  ⚙️  Firebase configuratie
@@ -18,6 +19,7 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
+const auth = getAuth(firebaseApp);
 const DB_KLAAR = true;
 
 // ─── kleuren (licht thema) ────────────────────────────────
@@ -1028,10 +1030,147 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, act
   );
 }
 
+// INLOG
+
+function LoginGate() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [fout, setFout] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  const CORRECT_USERNAME = "RadioredactieMaLive";
+  const CORRECT_PASSWORD = "radiomakenishetmooistedateris";
+  
+  const handleSubmit = async () => {
+    if (username === CORRECT_USERNAME && password === CORRECT_PASSWORD) {
+      setLoading(true);
+      try {
+        await signInWithEmailAndPassword(auth, "malive@radioprogramma.local", "securepassword123");
+      } catch (error) {
+        setFout(true);
+        setLoading(false);
+        setTimeout(() => setFout(false), 2000);
+      }
+    } else {
+      setFout(true);
+      setUsername("");
+      setPassword("");
+      setTimeout(() => setFout(false), 2000);
+    }
+  };
+  
+  return (
+    <div style={{
+      position: "fixed",
+      top: 0, left: 0, right: 0, bottom: 0,
+      background: "rgba(0,0,0,0.5)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 9999,
+      fontFamily: "'Inter','Segoe UI',sans-serif"
+    }}>
+      <div style={{
+        background: "#FFFFFF",
+        borderRadius: 12,
+        padding: "40px 32px",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+        maxWidth: 400,
+        textAlign: "center"
+      }}>
+        <div style={{fontSize: 32, fontWeight: 700, color: BRAND.roze, marginBottom: 8}}>MaLive</div>
+        <div style={{fontSize: 14, color: T.textMuted, marginBottom: 24}}>Inloggen</div>
+        
+        <input
+          type="text"
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && !loading && handleSubmit()}
+          placeholder="Inlognaam…"
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            fontSize: 16,
+            border: `2px solid ${fout ? "#EF4444" : T.inputBorder}`,
+            borderRadius: 8,
+            marginBottom: 12,
+            boxSizing: "border-box",
+            background: T.inputBg,
+            color: T.text,
+            opacity: loading ? 0.6 : 1,
+            cursor: loading ? "not-allowed" : "text"
+          }}
+          autoFocus
+        />
+        
+        <input
+          type="password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && !loading && handleSubmit()}
+          placeholder="Wachtwoord…"
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            fontSize: 16,
+            border: `2px solid ${fout ? "#EF4444" : T.inputBorder}`,
+            borderRadius: 8,
+            marginBottom: 16,
+            boxSizing: "border-box",
+            background: T.inputBg,
+            color: T.text,
+            opacity: loading ? 0.6 : 1,
+            cursor: loading ? "not-allowed" : "text"
+          }}
+        />
+        
+        {fout && (
+          <div style={{color: "#EF4444", fontSize: 13, marginBottom: 16, fontWeight: 500}}>Onjuiste inloggegevens.</div>
+        )}
+        
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            fontSize: 14,
+            fontWeight: 600,
+            background: loading ? "#ccc" : BRAND.gradient,
+            color: "white",
+            border: "none",
+            borderRadius: 8,
+            cursor: loading ? "not-allowed" : "pointer",
+            transition: "opacity 0.2s"
+          }}
+          onMouseOver={e => !loading && (e.target.style.opacity = "0.9")}
+          onMouseOut={e => !loading && (e.target.style.opacity = "1")}
+        >
+          {loading ? "Aan het inloggen…" : "Inloggen"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════
 //  HOOFDAPP
 // ════════════════════════════════════════════════════════════
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    setCurrentUser(user);
+  });
+  return unsubscribe;
+}, []);
+
+if (!currentUser) {
+  return <LoginGate />;
+}
   const [uitzendingen, setUitzendingen] = useState([]);
   const [actieveUitzending, setActieveUitzending] = useState(null);
   const [showUitzendingModal, setShowUitzendingModal] = useState(true);
