@@ -604,13 +604,15 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, act
               onDragStart={()=>setDragIdx(idx)}
               onDragOver={e=>{e.preventDefault();setDragOver(idx);}}
               onDragEnd={()=>{if(dragIdx!==null&&dragOver!==null&&dragIdx!==dragOver) moveItem(dragIdx,dragOver); setDragIdx(null);setDragOver(null);}}
-              style={{marginBottom:5,borderRadius:6,padding:"9px 12px",background:isActive?tc.color:`${tc.color}22`,border:`1px solid ${tc.color}55`,cursor:"grab",opacity:dragIdx===idx?0.4:1,outline:dragOver===idx&&dragIdx!==idx?`2px dashed ${tc.color}`:"none"}}>
+              onClick={()=>onScrollTo&&onScrollTo(item.id)}
+              title="Klik om naar dit blok te springen"
+              style={{marginBottom:5,borderRadius:6,padding:"9px 12px",background:isActive?tc.color:`${tc.color}22`,border:`1px solid ${tc.color}55`,cursor:"pointer",opacity:dragIdx===idx?0.4:1,outline:dragOver===idx&&dragIdx!==idx?`2px dashed ${tc.color}`:"none"}}>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <span onClick={()=>onScrollTo&&onScrollTo(item.id)} title="Klik om naar dit blok te scrollen" style={{fontSize:12,flex:1,fontWeight:600,cursor:"pointer",color:isActive?"#fff":tc.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tc.icon} {item.extra._naam || item.what}</span>
+                <span style={{fontSize:12,flex:1,fontWeight:600,color:isActive?"#fff":tc.color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tc.icon} {item.extra._naam || item.what}</span>
                 <div style={{display:"flex",gap:1,flexShrink:0}}>
-                  <button onClick={()=>moveItem(idx,Math.max(0,idx-1))} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▲</button>
-                  <button onClick={()=>moveItem(idx,Math.min(uurItems.length-1,idx+1))} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▼</button>
-                  <button onClick={()=>onDelete(item.id)} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#ffaaaa":"#EF4444",lineHeight:1}}>✕</button>
+                  <button onClick={e=>{e.stopPropagation();moveItem(idx,Math.max(0,idx-1));}} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▲</button>
+                  <button onClick={e=>{e.stopPropagation();moveItem(idx,Math.min(uurItems.length-1,idx+1));}} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▼</button>
+                  <button onClick={e=>{e.stopPropagation();onDelete(item.id);}} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#ffaaaa":"#EF4444",lineHeight:1}}>✕</button>
                 </div>
               </div>
               <div style={{fontSize:11,color:isActive?"rgba(255,255,255,0.8)":T.textLight,marginTop:2}}>{item.timeBerekend||item.time} · {item.duurWerkelijkSec<60?item.duurWerkelijkSec+"s":toMMSS(item.duurWerkelijkSec)}</div>
@@ -692,6 +694,7 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("lokaal");
   const [highlightId, setHighlightId] = useState(null);
   const itemRefs = useRef({});
+  const scrollRef = useRef(null);
   const skipNextSave = useRef(false);
   const saveTimer = useRef(null);
 
@@ -764,7 +767,7 @@ export default function App() {
     setSyncStatus("opslaan");
     saveTimer.current = setTimeout(() => {
       saveRundownToDB(actieveUitzending.id, rundown).then(res => setSyncStatus(res.ok ? "ok" : "fout"));
-    }, 1500);
+    }, 400);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [rundown]);
 
@@ -808,13 +811,36 @@ export default function App() {
     };
     const def = typeDefaults[type] || typeDefaults.tekst;
     const newItem = { id: Date.now(), time: "00:00", type, what: type.charAt(0).toUpperCase() + type.slice(1), who: def.who, extra: def.extra, uur, duurGeplandSec: def.dur, duurWerkelijkSec: def.dur, spotifyUri: null };
+
+    // Bepaal welk item van dit uur nu (deels) in beeld is; voeg het nieuwe item daarna in
+    let anchorId = null;
+    const container = scrollRef.current;
+    if (container) {
+      const containerTop = container.getBoundingClientRect().top;
+      const uurItemsZichtbaar = rundown.filter(i => i.uur === uur);
+      for (const it of uurItemsZichtbaar) {
+        const el = itemRefs.current[it.id];
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.bottom > containerTop + 80) { anchorId = it.id; break; }
+      }
+    }
+
     setRundown(prev => {
       const items = [...prev];
-      const uurItems = items.filter(i=>i.uur===uur);
-      const insertAfterIdx = uurItems.length > 0 ? items.lastIndexOf(uurItems[uurItems.length-1]) : items.length - 1;
-      items.splice(insertAfterIdx+1, 0, newItem);
+      let insertIdx;
+      if (anchorId !== null) {
+        insertIdx = items.findIndex(i => i.id === anchorId) + 1;
+      } else {
+        const uurItems = items.filter(i=>i.uur===uur);
+        insertIdx = uurItems.length > 0 ? items.lastIndexOf(uurItems[uurItems.length-1]) + 1 : items.length;
+      }
+      items.splice(insertIdx, 0, newItem);
       return herbereken(items, startTijd);
     });
+
+    // Scroll naar het nieuwe item en licht het kort op
+    setTimeout(() => scrollToItem(newItem.id), 100);
   }
 
   async function handleCreate(data) {
@@ -958,7 +984,7 @@ export default function App() {
         </div>
 
         <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-          <div style={{flex:1,overflowY:"auto",padding:"16px 24px",background:T.bg}}>
+          <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"16px 24px",background:T.bg}}>
             {!actieveUitzending && (
               <div style={{textAlign:"center",padding:"60px 20px",color:T.textMuted}}>
                 <div style={{fontSize:40,marginBottom:16}}>📻</div>
