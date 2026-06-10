@@ -20,6 +20,14 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 const DB_KLAAR = true;
 
+import { useState, useEffect, useCallback, useRef } from "react";
+
+// @ts-nocheck
+
+// API Configuratie
+const API_URL = "https://script.google.com/macros/s/AKfycbwbn8HvG_lvAlmAF0IDXUCB3TCr9WsIo7hZ3_Sj1UJ3eSepjr0fFCxEDwCdOkMPKgyz/exec";
+const API_KLAAR = !API_URL.includes("https://script.google.com/macros/s/AKfycbwbn8HvG_lvAlmAF0IDXUCB3TCr9WsIo7hZ3_Sj1UJ3eSepjr0fFCxEDwCdOkMPKgyz/exec");
+
 // ─── kleuren (licht thema) ────────────────────────────────
 const BRAND = {
   roze: "#FF00E7",
