@@ -21,6 +21,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
 const DB_KLAAR = true;
+const API_KLAAR = false;
 
 // ─── kleuren (licht thema) ────────────────────────────────
 const BRAND = {
