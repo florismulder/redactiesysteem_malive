@@ -4,7 +4,6 @@ import { initializeApp } from "firebase/app";
 import { getDatabase, ref as dbRef, set, get, onValue, update, remove } from "firebase/database";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 
-// Firebase config & init
 const firebaseConfig = {
   apiKey: "AIzaSyBlUnaR98BIeBjfqtzBv39L42R2oveMMs0",
   authDomain: "redactiesysteem-malive.firebaseapp.com",
@@ -19,7 +18,6 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
 
-// ─── kleuren (licht thema) ────────────────────────────────
 const BRAND = {
   roze: "#FF00E7",
   paars: "#6A0DAD",
@@ -214,7 +212,6 @@ async function saveRundownToDB(uitzendingId, rundown) {
     await set(rundownRef, rundownData);
     return { ok: true };
   } catch (e) {
-    console.error("Savefailed:", e);
     return { ok: false };
   }
 }
@@ -226,7 +223,6 @@ async function createUitzendingInDB(data) {
     await set(uitzRef, { id, datum: data.datum, naam: data.naam, startTijd: data.startTijd || "12:00", eindTijd: data.eindTijd || "14:00", aantalUren: data.aantalUren || 2 });
     return id;
   } catch (e) {
-    console.error("Create failed:", e);
     return null;
   }
 }
@@ -422,7 +418,6 @@ const whoVis = { Eindredactie: null, Host: null, Techniek: ["Techniek","Eindreda
 function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, isActive, isPast }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
-  const readOnly = false;
   const canEdit = role==="Eindredactie" || role==="Host" || item.who.includes(role);
   const kanHernoemen = role==="Eindredactie" && item.type !== "muziek";
   const dimmed = isPast&&!isActive;
@@ -440,7 +435,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRena
           {item.type !== "muziek" && (kanHernoemen ? (<input value={displayNaam} onChange={e=>onRename(item.id, e.target.value)} onClick={e=>e.stopPropagation()} style={{fontSize:13,color:"#0D0F12",fontWeight:600,background:"transparent",border:"none",borderBottom:"1px dashed #C8CDD5",outline:"none",padding:"0 2px",minWidth:120,maxWidth:440,fontFamily:"'Inter','Segoe UI',sans-serif"}}/>) : (<span style={{fontSize:13,color:"#0D0F12",fontWeight:600}}>{displayNaam}</span>))}
           <div style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>{item.who.map(w=>(<span key={w} style={{fontSize:10,padding:"2px 7px",borderRadius:10,background:`${roleColors[w]||"#6B7280"}18`,color:roleColors[w]||T.textMuted,border:`1px solid ${roleColors[w]||"#6B7280"}33`,fontWeight:500}}>{w}</span>))}{onDelete&&<button onClick={()=>onDelete(item.id)} style={{fontSize:11,padding:"1px 6px",background:"transparent",border:`1px solid #EF444433`,color:"#EF4444",borderRadius:4,cursor:"pointer",marginLeft:4}}>✕</button>}</div>
         </div>
-        {canEdit&&<>{item.type==="muziek"&&<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiest" disabled={readOnly}/><EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Titel" disabled={readOnly}/></div><DuurInvoer item={item} onChange={onDuurChange} onZoek={()=>onZoek(item.id)}/></>}{item.type==="tekst"&&<><EF label="Tekst" value={item.extra.tekst} onChange={v=>{upd("tekst",v); const woorden = v.trim().split(/\s+/).filter(Boolean).length; const sec = Math.max(10, Math.ceil(woorden / 130 * 60)); onDuurChange(item.id, sec);}} multiline placeholder="Voer tekst in…" disabled={readOnly}/><DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/></>}{item.type==="jingle"&&<div style={{fontSize:12,color:"#2D3444",fontStyle:"italic",fontWeight:500,padding:"4px 0"}}>{item.extra.label}</div>}{item.type==="nieuws"&&<><EF label="Intro" value={item.extra.intro} onChange={v=>upd("intro",v)} placeholder="Intro…" disabled={readOnly}/><EF label="Berichten" value={item.extra.berichten} onChange={v=>upd("berichten",v)} multiline placeholder="Berichten…" disabled={readOnly}/><DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/></>}{item.type==="interview"&&<InterviewBlok item={item} upd={upd} onDuurChange={onDuurChange} readOnly={readOnly}/>}{item.type==="special"&&<><EF label="Tekst" value={item.extra.tekst||""} onChange={v=>upd("tekst",v)} multiline placeholder="Tekst…" disabled={readOnly}/><DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/></>}</>}
+        {canEdit&&<>{item.type==="muziek"&&<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><EF label="Artiest" value={item.extra.artiest} onChange={v=>upd("artiest",v)} placeholder="Artiest" disabled={false}/><EF label="Nummer" value={item.extra.nummer} onChange={v=>upd("nummer",v)} placeholder="Titel" disabled={false}/></div><DuurInvoer item={item} onChange={onDuurChange} onZoek={()=>onZoek(item.id)}/></>}{item.type==="tekst"&&<><EF label="Tekst" value={item.extra.tekst} onChange={v=>{upd("tekst",v); const woorden = v.trim().split(/\s+/).filter(Boolean).length; const sec = Math.max(10, Math.ceil(woorden / 130 * 60)); onDuurChange(item.id, sec);}} multiline placeholder="Voer tekst in…" disabled={false}/><DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/></>}{item.type==="jingle"&&<div style={{fontSize:12,color:"#2D3444",fontStyle:"italic",fontWeight:500,padding:"4px 0"}}>{item.extra.label}</div>}{item.type==="nieuws"&&<><EF label="Intro" value={item.extra.intro} onChange={v=>upd("intro",v)} placeholder="Intro…" disabled={false}/><EF label="Berichten" value={item.extra.berichten} onChange={v=>upd("berichten",v)} multiline placeholder="Berichten…" disabled={false}/><DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/></>}{item.type==="interview"&&<InterviewBlok item={item} upd={upd} onDuurChange={onDuurChange} readOnly={false}/>}{item.type==="special"&&<><EF label="Tekst" value={item.extra.tekst||""} onChange={v=>upd("tekst",v)} multiline placeholder="Tekst…" disabled={false}/><DuurInvoer item={item} onChange={onDuurChange} showZoek={false}/></>}</>}
       </div>
     </div>
   );
@@ -572,6 +567,8 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("lokaal");
   const [highlightId, setHighlightId] = useState(null);
   const itemRefs = useRef({});
+  const unsubscribeRundown = useRef(null);
+  const hasInitialized = useRef(false);
 
   const startTijd = cleanTime(actieveUitzending?.startTijd || "12:00");
   const eindTijd = cleanTime(actieveUitzending?.eindTijd || "14:00");
@@ -591,38 +588,49 @@ export default function App() {
         setUitzendingen([]);
         setSyncStatus("ok");
       }
-    }, (error) => { console.error("Error:", error); setSyncStatus("fout"); });
+    }, (error) => { setSyncStatus("fout"); });
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (!actieveUitzending) { setRundown([]); return; }
+    if (!actieveUitzending || hasInitialized.current === actieveUitzending.id) return;
+    
+    hasInitialized.current = actieveUitzending.id;
     setSyncStatus("laden");
-    const n = actieveUitzending.aantalUren || 2;
-    let base = buildBase(startTijd);
-    for (let u = 3; u <= n; u++) base = [...base, ...buildUurBase(u, startTijd)];
-    const baseBerekend = herbereken(base, startTijd);
-    setRundown(baseBerekend);
+    
+    if (unsubscribeRundown.current) {
+      unsubscribeRundown.current();
+    }
 
     const rundownRef = dbRef(db, `rundown/${actieveUitzending.id}`);
-    const unsubscribe = onValue(rundownRef, (snapshot) => {
+    unsubscribeRundown.current = onValue(rundownRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
         const order = data._order?.ids || [];
         const items = order.map(id => data[String(id)]).filter(item => item && item.id).map(item => ({ id: item.id, type: item.type || "muziek", what: item.what || "Item", who: item.who || [], uur: item.uur || 1, extra: item.extra || {}, duurGeplandSec: item.duurGeplandSec || 180, duurWerkelijkSec: item.duurWerkelijkSec || 180, spotifyUri: item.spotifyUri || null, time: item.time || "00:00" }));
-        if (items.length > 0) setRundown(herbereken(items, startTijd));
-        setSyncStatus("ok");
-      } else setSyncStatus("ok");
-    }, (error) => { console.error("Error:", error); setSyncStatus("fout"); });
-    return () => unsubscribe();
-  }, [actieveUitzending, startTijd]);
+        if (items.length > 0) {
+          setRundown(herbereken(items, startTijd));
+        }
+      } else {
+        const n = actieveUitzending.aantalUren || 2;
+        let base = buildBase(startTijd);
+        for (let u = 2; u <= n; u++) base = [...base, ...buildUurBase(u, startTijd)];
+        setRundown(herbereken(base, startTijd));
+      }
+      setSyncStatus("ok");
+    }, (error) => { setSyncStatus("fout"); });
+
+    return () => {
+      if (unsubscribeRundown.current) unsubscribeRundown.current();
+    };
+  }, [actieveUitzending?.id, startTijd]);
 
   const debouncedRundown = useDebounce(rundown, 2000);
   useEffect(() => {
     if (!actieveUitzending || rundown.length === 0) return;
     setSyncStatus("opslaan");
     saveRundownToDB(actieveUitzending.id, rundown).then(res => { setSyncStatus(res.ok ? "ok" : "fout"); });
-  }, [debouncedRundown, actieveUitzending]);
+  }, [debouncedRundown, actieveUitzending?.id]);
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
@@ -648,7 +656,7 @@ export default function App() {
     setRundown(prev => { const items = [...prev]; const uurItems = items.filter(i=>i.uur===uur); const insertAfterIdx = items.lastIndexOf(uurItems[uurItems.length-1]); items.splice(insertAfterIdx+1, 0, newItem); return herbereken(items, startTijd); });
   }
   async function handleCreate(data) { const id = await createUitzendingInDB(data); if (id) { const nieuw = { id, ...data, aantalUren: 2 }; handleSelectUitzending(nieuw); } }
-  function handleSelectUitzending(u) { setActieveUitzending(u); setSimTime(cleanTime(u.startTijd || "12:00")); setShowUitzendingModal(false); setTab("uur_1"); }
+  function handleSelectUitzending(u) { hasInitialized.current = false; setActieveUitzending(u); setSimTime(cleanTime(u.startTijd || "12:00")); setShowUitzendingModal(false); setTab("uur_1"); }
   function handleDeleteUitzending(id) { setUitzendingen(prev => prev.filter(u => u.id !== id)); if (actieveUitzending?.id === id) { setActieveUitzending(null); setRundown([]); setShowUitzendingModal(true); } deleteUitzendingFromDB(id); }
   async function handleCopyUitzending(bronId, { datum, naam }) {
     const bron = uitzendingen.find(u => u.id === bronId);
