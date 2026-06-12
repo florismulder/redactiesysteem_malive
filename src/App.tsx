@@ -457,7 +457,7 @@ function InterviewBlok({ item, upd, onDuurChange }) {
 
 const whoVis = { Eindredactie: null, Host: null, Techniek: ["Techniek","Eindredactie"], Nieuwsredactie: ["Nieuwsredactie","Eindredactie"], Muziekredactie: ["Muziekredactie","Eindredactie"] };
 
-function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, isActive, isPast }) {
+function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRename, onPrint, isActive, isPast }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
   const canEdit = role==="Eindredactie" || role==="Host" || item.who.includes(role);
@@ -485,6 +485,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDelete, onRena
           ))}
           <div style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
             {item.who.map(w=>(<span key={w} style={{fontSize:10,padding:"2px 7px",borderRadius:10,background:`${roleColors[w]||"#6B7280"}18`,color:roleColors[w]||T.textMuted,border:`1px solid ${roleColors[w]||"#6B7280"}33`,fontWeight:500}}>{w}</span>))}
+            {onPrint&&<button onClick={()=>onPrint(item.id)} title="Dit blok printen" style={{fontSize:11,padding:"1px 6px",background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,borderRadius:4,cursor:"pointer",marginLeft:4}}>🖨</button>}
             {onDelete&&<button onClick={()=>onDelete(item.id)} style={{fontSize:11,padding:"1px 6px",background:"transparent",border:`1px solid #EF444433`,color:"#EF4444",borderRadius:4,cursor:"pointer",marginLeft:4}}>✕</button>}
           </div>
         </div>
@@ -974,6 +975,59 @@ export default function App() {
     if (tab === `uur_${uurToRemove}`) setTab(`uur_${aantalUren - 1}`);
   }
 
+  function itemPrintHTML(item) {
+    const esc = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");
+    const tc = typeConfig[item.type] || typeConfig.tekst;
+    const naam = item.extra._naam || item.what;
+    const e = item.extra;
+    let inhoud = "";
+    if (item.type === "muziek") inhoud = [e.artiest && `<b>${esc(e.artiest)}</b> — ${esc(e.nummer)}`, e.feitje && `Feitje: ${esc(e.feitje)}`].filter(Boolean).join("<br>");
+    else if (item.type === "tekst") inhoud = esc(e.tekst);
+    else if (item.type === "nieuws") inhoud = [e.intro && `<i>${esc(e.intro)}</i>`, e.berichten && esc(e.berichten)].filter(Boolean).join("<br>");
+    else if (item.type === "interview") inhoud = [e.wie && `Gast: <b>${esc(e.wie)}</b>${e.functie?` (${esc(e.functie)})`:""} — ${esc(e.type||"Studio")}`, e.onderwerp && `Onderwerp: ${esc(e.onderwerp)}`, e.intro && `<i>${esc(e.intro)}</i>`, e.vragen && `Vragen:<br>${esc(e.vragen)}`, e.achtergrond && `Achtergrond:<br>${esc(e.achtergrond)}`].filter(Boolean).join("<br>");
+    else if (item.type === "jingle") inhoud = `<i>${esc(e.label)}</i>`;
+    else inhoud = [e.lp_naam && `LP: <b>${esc(e.lp_naam)}</b> — ${esc(e.artiest)}`, e.verhaal && esc(e.verhaal), e.omschrijving && esc(e.omschrijving), e.link && esc(e.link), e.tekst && esc(e.tekst)].filter(Boolean).join("<br>");
+    return `<div class="item"><div class="kop"><span class="tijd">${item.timeBerekend||item.time}</span><span class="type" style="color:${tc.color}">${tc.label}</span><span class="naam">${esc(naam)}</span><span class="duur">${toMMSS(item.duurWerkelijkSec)}</span><span class="wie">${item.who.join(", ")}</span></div>${inhoud?`<div class="inhoud">${inhoud}</div>`:""}</div>`;
+  }
+
+  function openPrintVenster(body, groot=false) {
+    const esc = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const html = `<!DOCTYPE html><html><head><title>MaLive Draaiboek — ${esc(formatUitzendingNaam(actieveUitzending))}</title><style>
+      body{font-family:'Segoe UI',Arial,sans-serif;font-size:${groot?"15px":"11px"};color:#111;margin:24px;}
+      h1{font-size:18px;margin:0 0 2px;} .sub{color:#666;font-size:12px;margin-bottom:16px;}
+      h2{font-size:13px;border-bottom:2px solid #FF00E7;padding-bottom:3px;margin:18px 0 8px;page-break-after:avoid;}
+      .item{border-bottom:1px solid #ddd;padding:${groot?"10px":"5px"} 0;page-break-inside:avoid;}
+      .kop{display:flex;gap:10px;align-items:baseline;}
+      .tijd{font-family:monospace;font-weight:bold;width:46px;flex-shrink:0;}
+      .type{font-size:${groot?"11px":"9px"};font-weight:bold;letter-spacing:1px;width:80px;flex-shrink:0;}
+      .naam{font-weight:600;flex:1;}
+      .duur{font-family:monospace;color:#666;}
+      .wie{color:#888;font-size:${groot?"11px":"9px"};}
+      .inhoud{margin:${groot?"8px 0 0 56px":"3px 0 0 52px"};color:#333;line-height:${groot?"1.8":"1.45"};}
+      @media print { body{margin:8mm;} }
+    </style></head><body><h1>MaLive Draaiboek</h1><div class="sub">${esc(formatUitzendingNaam(actieveUitzending))} · ${formatDatum(actieveUitzending.datum)} · ${startTijd}–${eindTijd}</div>${body}<script>window.onload=()=>window.print()</script></body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+
+  function handlePrint() {
+    if (!actieveUitzending) return;
+    const uren = Array.from({length: aantalUren}, (_, i) => i + 1);
+    let body = "";
+    uren.forEach(u => {
+      body += `<h2>UUR ${u} — ${uurLabel(u)}</h2>`;
+      rundown.filter(i => i.uur === u).forEach(item => { body += itemPrintHTML(item); });
+    });
+    openPrintVenster(body);
+  }
+
+  function handlePrintItem(id) {
+    if (!actieveUitzending) return;
+    const item = rundown.find(r => r.id === id);
+    if (!item) return;
+    openPrintVenster(itemPrintHTML(item), true);
+  }
+
   const uurTabs = Array.from({length: aantalUren}, (_, i) => ({ id: `uur_${i+1}`, l: `UUR ${i+1}`, s: uurLabel(i+1) }));
   const allTabs = [...uurTabs, { id:"redactie", l:"REDACTIE", s:"" }];
   const currentItems = isUurTab ? rundown.filter(i => i.uur === tabUur) : [];
@@ -1008,6 +1062,7 @@ export default function App() {
           </button>
         )}
         <div style={{flex:1}}/>
+        {actieveUitzending && <button onClick={handlePrint} title="Draaiboek printen" style={{padding:"5px 14px",background:T.bg,border:`1px solid ${T.border}`,borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:600,color:T.text}}>🖨 Print</button>}
         <SyncBadge status={syncStatus}/>
         <div style={{fontSize:14,color:T.text,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>
           {String(now.getHours()).padStart(2,"0")}:{String(now.getMinutes()).padStart(2,"0")}:{String(now.getSeconds()).padStart(2,"0")}
@@ -1082,7 +1137,7 @@ export default function App() {
               <DriftBalk items={rundown} uur={tabUur} startTijd={startTijd}/>
               {currentItems.map(item=>(
                 <div key={item.id} ref={el=>itemRefs.current[item.id]=el} style={{scrollMarginTop:12, outline:highlightId===item.id?"2px solid #FF00E7":"none", outlineOffset:2, borderRadius:6}}>
-                  <ItemCard item={item} role={role} onUpdate={handleUpdate} onDuurChange={handleDuurChange} onRename={handleRename} onZoek={id=>{setZoekId(id);setZoekOpen(true);}} onDelete={role==="Eindredactie"?handleDelete:null} isActive={getActiveId(tabUur)===item.id} isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
+                  <ItemCard item={item} role={role} onUpdate={handleUpdate} onDuurChange={handleDuurChange} onRename={handleRename} onPrint={handlePrintItem} onZoek={id=>{setZoekId(id);setZoekOpen(true);}} onDelete={role==="Eindredactie"?handleDelete:null} isActive={getActiveId(tabUur)===item.id} isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
                 </div>
               ))}
               {role==="Eindredactie" && <ToevoegenKnop uur={tabUur} onAdd={handleAddItem}/>}
