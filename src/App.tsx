@@ -637,6 +637,73 @@ function TimelinePanel({ items, uur, onReorder, onDelete, onAdd, onScrollTo, act
   );
 }
 
+function RedactieTab({ uitzendingId, setSyncStatus }) {
+  const [redactie, setRedactie] = useState([
+    {functie:"Eindredactie",taak:"Host 1 / Host 2 / Techniek",produceert:"De plaat en zijn verhaal",namen:[""]},
+    {functie:"Nieuwsredactie",taak:"Nieuwslezer",produceert:"Nieuws, Amsterdams nieuws",namen:[""]},
+    {functie:"Interviewredactie",taak:"Interviewer",produceert:"Foto geïnterviewde",namen:[""]},
+    {functie:"Muziekredactie",taak:"New Music / LP van de dag",produceert:"New Music overzicht",namen:[""]},
+    {functie:"Reportageredactie",taak:"",produceert:"Reportage inclusief foto's",namen:[""]},
+    {functie:"Webredactie",taak:"Regisseur / Cameraregie",produceert:"MaLive redactie",namen:[""]},
+  ]);
+  const skipSave = useRef(true);
+  const timer = useRef(null);
+
+  useEffect(()=>{
+    let cancelled = false;
+    get(dbRef(db, `redactie/${uitzendingId}`)).then(snapshot=>{
+      if (cancelled) return;
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        if (Array.isArray(data) && data.length) {
+          skipSave.current = true;
+          setRedactie(data.map(x=>({...x, namen: x.namen||(x.naam?[x.naam]:[""])})));
+        }
+      }
+    }).catch(()=>{});
+    return ()=>{ cancelled = true; };
+  },[uitzendingId]);
+
+  useEffect(()=>{
+    if (skipSave.current) { skipSave.current = false; return; }
+    if (timer.current) clearTimeout(timer.current);
+    setSyncStatus("opslaan");
+    timer.current = setTimeout(()=>{
+      set(dbRef(db, `redactie/${uitzendingId}`), redactie)
+        .then(()=>setSyncStatus("ok"))
+        .catch(()=>setSyncStatus("fout"));
+    }, 400);
+    return ()=>{ if (timer.current) clearTimeout(timer.current); };
+  },[redactie]);
+
+  const updNaam=(i,j,v)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:r.namen.map((n,ni)=>ni===j?v:n)}));
+  const addNaam=(i)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:[...r.namen,""]}));
+  const delNaam=(i,j)=>setRedactie(p=>p.map((r,ri)=>ri!==i?r:{...r,namen:r.namen.length>1?r.namen.filter((_,ni)=>ni!==j):r.namen}));
+
+  return (
+    <div>
+      <div style={{fontSize:11,letterSpacing:2,color:T.textMuted,marginBottom:14,fontWeight:600,textTransform:"uppercase"}}>Redactie & Rolverdeling</div>
+      {redactie.map((r,i)=>(
+        <div key={i} style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:6,padding:"12px 16px",marginBottom:6,display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1.2fr",gap:12,alignItems:"start",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+          <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>FUNCTIE</div><div style={{fontSize:13,color:T.text,fontWeight:600}}>{r.functie}</div></div>
+          <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>ROL</div><div style={{fontSize:12,color:T.textMuted}}>{r.taak||"—"}</div></div>
+          <div><div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:3,fontWeight:600}}>PRODUCEERT</div><div style={{fontSize:11,color:T.textMuted}}>{r.produceert}</div></div>
+          <div>
+            <div style={{fontSize:9,color:T.textLight,letterSpacing:2,marginBottom:4,fontWeight:600}}>WIE</div>
+            {(r.namen||[""]).map((n,j)=>(
+              <div key={j} style={{display:"flex",gap:4,marginBottom:4}}>
+                <input value={n} onChange={e=>updNaam(i,j,e.target.value)} placeholder="Naam…" style={{flex:1,padding:"5px 8px",fontSize:12,border:`1px solid ${T.inputBorder}`,borderRadius:5,background:T.inputBg,color:T.text}}/>
+                {r.namen.length>1&&(<button onClick={()=>delNaam(i,j)} style={{padding:"4px 7px",fontSize:11,border:`1px solid ${T.border}`,borderRadius:5,background:"transparent",color:"#EF4444",cursor:"pointer"}}>×</button>)}
+              </div>
+            ))}
+            <button onClick={()=>addNaam(i)} style={{fontSize:10,color:BRAND.paars,background:"transparent",border:"none",cursor:"pointer",padding:"0 2px",fontWeight:600}}>+ naam toevoegen</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LoginGate() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -693,6 +760,8 @@ export default function App() {
   const [zoekId, setZoekId] = useState(null);
   const [syncStatus, setSyncStatus] = useState("lokaal");
   const [highlightId, setHighlightId] = useState(null);
+  const [showLinks, setShowLinks] = useState(true);
+  const [showRechts, setShowRechts] = useState(true);
   const itemRefs = useRef({});
   const scrollRef = useRef(null);
   const skipNextSave = useRef(false);
@@ -906,6 +975,7 @@ export default function App() {
   }
 
   const uurTabs = Array.from({length: aantalUren}, (_, i) => ({ id: `uur_${i+1}`, l: `UUR ${i+1}`, s: uurLabel(i+1) }));
+  const allTabs = [...uurTabs, { id:"redactie", l:"REDACTIE", s:"" }];
   const currentItems = isUurTab ? rundown.filter(i => i.uur === tabUur) : [];
 
   // ─── Render ───────────────────────────────────────────────
@@ -950,15 +1020,20 @@ export default function App() {
           <button key={r} onClick={()=>setRole(r)} style={{padding:"4px 12px",borderRadius:20,border:"1px solid",fontSize:11,cursor:"pointer",borderColor:role===r?roleColors[r]:T.border,background:role===r?`${roleColors[r]}15`:T.bg,color:role===r?roleColors[r]:"#1A1F2B",fontWeight:role===r?600:500}}>{r}</button>
         ))}
         <div style={{flex:1}}/>
+        {!showLinks && allTabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:600,background:tab===t.id?`${BRAND.roze}15`:T.bg,border:`1px solid ${tab===t.id?BRAND.roze:T.border}`,color:tab===t.id?BRAND.roze:T.textMuted}}>{t.l}</button>
+        ))}
+        <button onClick={()=>setShowLinks(s=>!s)} title={showLinks?"Linkerkolom verbergen":"Linkerkolom tonen"} style={{padding:"3px 10px",fontSize:11,borderRadius:4,cursor:"pointer",fontWeight:600,background:showLinks?`${BRAND.paars}15`:T.bg,border:`1px solid ${showLinks?BRAND.paars:T.border}`,color:showLinks?BRAND.paars:T.textMuted}}>◧</button>
+        <button onClick={()=>setShowRechts(s=>!s)} title={showRechts?"Rechterkolom verbergen":"Rechterkolom tonen"} style={{padding:"3px 10px",fontSize:11,borderRadius:4,cursor:"pointer",fontWeight:600,background:showRechts?`${BRAND.paars}15`:T.bg,border:`1px solid ${showRechts?BRAND.paars:T.border}`,color:showRechts?BRAND.paars:T.textMuted}}>◨</button>
         <span style={{fontSize:10,color:"#1F2937",letterSpacing:1,fontWeight:500}}>SIM</span>
         <input type="time" value={simTime} onChange={e=>setSimTime(e.target.value)} style={{background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"3px 8px",fontSize:11,borderRadius:4}}/>
         <button onClick={()=>setUseSim(s=>!s)} style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,background:useSim?`${BRAND.roze}15`:T.bg,border:`1px solid ${useSim?BRAND.roze:T.border}`,color:useSim?BRAND.roze:"#1F2937"}}>{useSim?"SIM AAN":"SIM UIT"}</button>
       </div>
 
       <div style={{display:"flex",height:"calc(100vh - 100px)",overflow:"hidden",position:"relative"}}>
-        <div style={{width:180,background:T.bgSidebar,borderRight:`1px solid ${T.border}`,flexShrink:0,overflowY:"auto"}}>
+        {showLinks && <div style={{width:180,background:T.bgSidebar,borderRight:`1px solid ${T.border}`,flexShrink:0,overflowY:"auto"}}>
           <div style={{paddingTop:8}}>
-            {uurTabs.map(t=>(
+            {allTabs.map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)} style={{width:"100%",textAlign:"left",padding:"10px 16px",background:tab===t.id?"#F9FAFB":"transparent",border:"none",borderLeft:`3px solid ${tab===t.id?BRAND.roze:"transparent"}`,color:tab===t.id?"#0A0C10":"#1A1F2B",cursor:"pointer",fontSize:12,fontWeight:tab===t.id?600:400}}>
                 <div>{t.l}</div>
                 {t.s&&<div style={{fontSize:10,color:T.textLight,marginTop:1}}>{t.s}</div>}
@@ -981,7 +1056,7 @@ export default function App() {
               </div>
             ))}
           </div>
-        </div>
+        </div>}
 
         <div style={{flex:1,display:"flex",overflow:"hidden"}}>
           <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"16px 24px",background:T.bg}}>
@@ -993,6 +1068,7 @@ export default function App() {
                 <button onClick={()=>setShowUitzendingModal(true)} style={{padding:"10px 24px",background:BRAND.gradient,border:"none",color:"#fff",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}}>Uitzending kiezen</button>
               </div>
             )}
+            {actieveUitzending && tab==="redactie" && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
             {actieveUitzending && isUurTab && <>
               <div style={{marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -1012,7 +1088,7 @@ export default function App() {
               {role==="Eindredactie" && <ToevoegenKnop uur={tabUur} onAdd={handleAddItem}/>}
             </>}
           </div>
-          {actieveUitzending && isUurTab && role==="Eindredactie" && (
+          {actieveUitzending && isUurTab && role==="Eindredactie" && showRechts && (
             <TimelinePanel items={rundown} uur={tabUur} activeId={getActiveId(tabUur)} onReorder={handleReorder} onDelete={handleDelete} onAdd={handleAddItem} onScrollTo={scrollToItem}/>
           )}
         </div>
