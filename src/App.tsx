@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref as dbRef, set, get, onValue } from "firebase/database";
+import { getDatabase, ref as dbRef, set, get, onValue, update } from "firebase/database";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 
 const firebaseConfig = {
@@ -175,18 +175,30 @@ function driftSec(items, uur, startTijd = "12:00") {
 }
 
 // ─── Firebase helpers ──────────────────────────────────────
-async function saveRundownToDB(uitzendingId, rundown) {
+function slimItem(item) {
+  return {
+    id: item.id, type: item.type, what: item.what, who: item.who || [], uur: item.uur,
+    extra: item.extra || {}, duurGeplandSec: item.duurGeplandSec, duurWerkelijkSec: item.duurWerkelijkSec,
+    spotifyUri: item.spotifyUri || null, time: item.time,
+  };
+}
+function canonRundown(items) { return JSON.stringify(items.map(slimItem)); }
+
+// Schrijft alleen gewijzigde/nieuwe items en verwijderingen — multi-path update, atomair.
+// Zo overschrijven twee gebruikers elkaars items niet.
+async function saveRundownDiff(uitzendingId, rundown, prevItems) {
   try {
-    const rundownData = {};
+    const updates = {};
+    const prevMap = new Map((prevItems || []).map(i => [String(i.id), JSON.stringify(slimItem(i))]));
+    const curIds = new Set(rundown.map(i => String(i.id)));
     rundown.forEach(item => {
-      rundownData[String(item.id)] = {
-        id: item.id, type: item.type, what: item.what, who: item.who, uur: item.uur,
-        extra: item.extra, duurGeplandSec: item.duurGeplandSec, duurWerkelijkSec: item.duurWerkelijkSec,
-        spotifyUri: item.spotifyUri || null, time: item.time,
-      };
+      const key = String(item.id);
+      const slim = slimItem(item);
+      if (prevMap.get(key) !== JSON.stringify(slim)) updates[key] = slim;
     });
-    rundownData._order = { ids: rundown.map(i => String(i.id)) };
-    await set(dbRef(db, `rundown/${uitzendingId}`), rundownData);
+    prevMap.forEach((_, key) => { if (!curIds.has(key)) updates[key] = null; });
+    updates["_order"] = { ids: rundown.map(i => String(i.id)) };
+    await update(dbRef(db, `rundown/${uitzendingId}`), updates);
     return { ok: true };
   } catch (e) {
     console.error("Save failed:", e);
@@ -647,29 +659,32 @@ function RedactieTab({ uitzendingId, setSyncStatus }) {
     {functie:"Reportageredactie",taak:"",produceert:"Reportage inclusief foto's",namen:[""]},
     {functie:"Webredactie",taak:"Regisseur / Cameraregie",produceert:"MaLive redactie",namen:[""]},
   ]);
-  const skipSave = useRef(true);
+  const lastJson = useRef(null);
   const timer = useRef(null);
 
   useEffect(()=>{
-    let cancelled = false;
-    get(dbRef(db, `redactie/${uitzendingId}`)).then(snapshot=>{
-      if (cancelled) return;
+    const unsubscribe = onValue(dbRef(db, `redactie/${uitzendingId}`), snapshot=>{
       if (snapshot.exists()) {
         const data = snapshot.val();
         if (Array.isArray(data) && data.length) {
-          skipSave.current = true;
-          setRedactie(data.map(x=>({...x, namen: x.namen||(x.naam?[x.naam]:[""])})));
+          const clean = data.map(x=>({...x, namen: x.namen||(x.naam?[x.naam]:[""])}));
+          const incoming = JSON.stringify(clean);
+          if (incoming === lastJson.current) return; // echo van eigen write
+          lastJson.current = incoming;
+          setRedactie(clean);
         }
       }
-    }).catch(()=>{});
-    return ()=>{ cancelled = true; };
+    }, ()=>{});
+    return ()=>unsubscribe();
   },[uitzendingId]);
 
   useEffect(()=>{
-    if (skipSave.current) { skipSave.current = false; return; }
+    const current = JSON.stringify(redactie);
+    if (current === lastJson.current) return;
     if (timer.current) clearTimeout(timer.current);
     setSyncStatus("opslaan");
     timer.current = setTimeout(()=>{
+      lastJson.current = current;
       set(dbRef(db, `redactie/${uitzendingId}`), redactie)
         .then(()=>setSyncStatus("ok"))
         .catch(()=>setSyncStatus("fout"));
@@ -765,7 +780,8 @@ export default function App() {
   const [showRechts, setShowRechts] = useState(true);
   const itemRefs = useRef({});
   const scrollRef = useRef(null);
-  const skipNextSave = useRef(false);
+  const lastSynced = useRef({ json: null, items: [] });
+  const recentlyEdited = useRef(new Map());
   const saveTimer = useRef(null);
 
   const startTijd = cleanTime(actieveUitzending?.startTijd || "12:00");
@@ -802,41 +818,68 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUser]);
 
-  // Rundown laden bij uitzending-selectie (eenmalig per uitzending, GEEN live listener — voorkomt loops)
+  // Live rundown-listener met echo-detectie en bescherming van eigen lopende bewerkingen
   useEffect(() => {
     if (!currentUser || !actieveUitzending) return;
-    let cancelled = false;
+    lastSynced.current = { json: null, items: [] };
+    recentlyEdited.current.clear();
     setSyncStatus("laden");
-    get(dbRef(db, `rundown/${actieveUitzending.id}`)).then(snapshot => {
-      if (cancelled) return;
+
+    const unsubscribe = onValue(dbRef(db, `rundown/${actieveUitzending.id}`), (snapshot) => {
       if (snapshot.exists()) {
         const parsed = parseRundownSnapshot(snapshot.val(), startTijd);
         if (parsed.length > 0) {
-          skipNextSave.current = true;
-          setRundown(parsed);
+          const incomingJson = canonRundown(parsed);
+          if (incomingJson === lastSynced.current.json) { setSyncStatus("ok"); return; } // echo van eigen write
+          const remoteSlim = parsed.map(slimItem);
+          setRundown(prev => {
+            const nu = Date.now();
+            const parsedIds = new Set(parsed.map(p => String(p.id)));
+            // Remote staat overnemen, behalve items die wij <8s geleden zelf bewerkten
+            let merged = parsed.map(remote => {
+              const t = recentlyEdited.current.get(remote.id);
+              if (t && nu - t < 8000) {
+                const local = prev.find(p => p.id === remote.id);
+                if (local) return local;
+              }
+              return remote;
+            });
+            // Eigen net-toegevoegde items die remote nog niet kent, behouden op hun plek
+            prev.forEach((local, idx) => {
+              const t = recentlyEdited.current.get(local.id);
+              if (t && nu - t < 8000 && !parsedIds.has(String(local.id))) {
+                merged.splice(Math.min(idx, merged.length), 0, local);
+              }
+            });
+            return herbereken(merged, startTijd);
+          });
+          lastSynced.current = { json: incomingJson, items: remoteSlim };
           setSyncStatus("ok");
           return;
         }
       }
-      // Geen data in Firebase: bouw basisrundown
+      // Geen data in Firebase: bouw basisrundown (wordt daarna automatisch opgeslagen)
       const n = actieveUitzending.aantalUren || 2;
       let base = buildBase(startTijd);
       for (let u = 3; u <= n; u++) base = [...base, ...buildUurBase(u, startTijd)];
-      skipNextSave.current = true;
       setRundown(herbereken(base, startTijd));
       setSyncStatus("ok");
-    }).catch(() => { if (!cancelled) setSyncStatus("fout"); });
-    return () => { cancelled = true; };
+    }, () => setSyncStatus("fout"));
+
+    return () => unsubscribe();
   }, [currentUser, actieveUitzending?.id]);
 
-  // Opslaan met debounce via timer-ref (geen extra state, geen loop)
+  // Opslaan: alleen het verschil t.o.v. de laatst gesyncte staat wordt geschreven
   useEffect(() => {
     if (!currentUser || !actieveUitzending || rundown.length === 0) return;
-    if (skipNextSave.current) { skipNextSave.current = false; return; }
+    const current = canonRundown(rundown);
+    if (current === lastSynced.current.json) return; // niets te schrijven
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSyncStatus("opslaan");
     saveTimer.current = setTimeout(() => {
-      saveRundownToDB(actieveUitzending.id, rundown).then(res => setSyncStatus(res.ok ? "ok" : "fout"));
+      const prevItems = lastSynced.current.items;
+      lastSynced.current = { json: current, items: rundown.map(slimItem) };
+      saveRundownDiff(actieveUitzending.id, rundown, prevItems).then(res => setSyncStatus(res.ok ? "ok" : "fout"));
     }, 400);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [rundown]);
@@ -854,11 +897,13 @@ export default function App() {
     return active;
   }
 
-  function handleUpdate(id, newExtra) { setRundown(prev=>prev.map(r=>r.id===id?{...r,extra:newExtra}:r)); }
-  function handleRename(id, newWhat) { setRundown(prev=>prev.map(r=>r.id===id?{...r,what:newWhat,extra:{...r.extra,_naam:newWhat}}:r)); }
-  function handleDuurChange(id, sec) { setRundown(prev=>herbereken(prev.map(r=>r.id===id?{...r,duurWerkelijkSec:sec}:r),startTijd)); }
+  function markEdited(id) { recentlyEdited.current.set(id, Date.now()); }
+  function handleUpdate(id, newExtra) { markEdited(id); setRundown(prev=>prev.map(r=>r.id===id?{...r,extra:newExtra}:r)); }
+  function handleRename(id, newWhat) { markEdited(id); setRundown(prev=>prev.map(r=>r.id===id?{...r,what:newWhat,extra:{...r.extra,_naam:newWhat}}:r)); }
+  function handleDuurChange(id, sec) { markEdited(id); setRundown(prev=>herbereken(prev.map(r=>r.id===id?{...r,duurWerkelijkSec:sec}:r),startTijd)); }
   function handleTrackSelect(track) {
     if (!zoekId) return;
+    markEdited(zoekId);
     setRundown(prev=>herbereken(prev.map(r=>r.id===zoekId?{...r, duurWerkelijkSec:track.duurSec||r.duurWerkelijkSec, extra:{...r.extra,artiest:track.artiest||r.extra.artiest,nummer:track.nummer||r.extra.nummer}}:r),startTijd));
   }
   function handleDelete(id) { setRundown(prev=>herbereken(prev.filter(r=>r.id!==id),startTijd)); }
@@ -881,6 +926,7 @@ export default function App() {
     };
     const def = typeDefaults[type] || typeDefaults.tekst;
     const newItem = { id: Date.now(), time: "00:00", type, what: type.charAt(0).toUpperCase() + type.slice(1), who: def.who, extra: def.extra, uur, duurGeplandSec: def.dur, duurWerkelijkSec: def.dur, spotifyUri: null };
+    markEdited(newItem.id);
 
     // Bepaal welk item van dit uur nu (deels) in beeld is; voeg het nieuwe item daarna in
     let anchorId = null;
