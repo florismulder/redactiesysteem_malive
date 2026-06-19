@@ -250,7 +250,7 @@ function applyFirebaseData(currentRundown, fbData, startTijd, recentlyEdited) {
   const mergedById = { ...currentById };
 
   Object.entries(fbItems).forEach(([idStr, fbItem]) => {
-    if (!fbItem) { delete mergedById[idStr]; return; }
+    if (!fbItem || fbItem._deleted) { delete mergedById[idStr]; return; } // tombstone — ook bij basisblokken
     const current = mergedById[idStr];
     const isProtected = now - (recentlyEdited.get(idStr) || 0) < 8000;
 
@@ -1243,10 +1243,10 @@ export default function App() {
       }
     });
 
-    // Verwijderde items (null = verwijder in Firebase)
+    // Verwijderde items — tombstone i.p.v. null, anders verschijnen basisblokken weer terug bij andere gebruikers
     const currentIds = new Set(debouncedRundown.map(i => String(i.id)));
     prevItems.forEach(pi => {
-      if (!currentIds.has(String(pi.id))) paths[`${base}/items/${pi.id}`] = null;
+      if (!currentIds.has(String(pi.id))) paths[`${base}/items/${pi.id}`] = { _deleted: true };
     });
 
     // Volgorde als die veranderd is
