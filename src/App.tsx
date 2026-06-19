@@ -1031,23 +1031,24 @@ function TimelinePanel({ items, uur, onReorder, onDeleteVraag, onDeleteBevestig,
           const isActive = item.id === activeId;
           return (
             <div key={item.id} draggable
+              onClick={()=>onScrollTo&&onScrollTo(item.id)}
               onDragStart={()=>setDragIdx(idx)}
               onDragOver={e=>{e.preventDefault();setDragOver(idx);}}
               onDragEnd={()=>{
                 if(dragIdx!==null&&dragOver!==null&&dragIdx!==dragOver) moveItem(dragIdx,dragOver);
                 setDragIdx(null);setDragOver(null);
               }}
+              title="Klik om naar dit blok te scrollen"
               style={{marginBottom:5,borderRadius:6,padding:"9px 14px",
                 background:isActive?tc.color:`${tc.color}22`,border:`1px solid ${tc.color}55`,
-                cursor:"grab",opacity:dragIdx===idx?0.4:1,
+                cursor:"pointer",opacity:dragIdx===idx?0.4:1,
                 outline:dragOver===idx&&dragIdx!==idx?`2px dashed ${tc.color}`:"none",transition:"opacity 0.15s"}}>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <span onClick={()=>onScrollTo&&onScrollTo(item.id)}
-                  style={{fontSize:12,flex:1,fontWeight:600,cursor:"pointer",color:isActive?"#fff":tc.color,
-                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title="Klik om naar dit blok te scrollen">
+                <span style={{fontSize:12,flex:1,fontWeight:600,color:isActive?"#fff":tc.color,
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                   {tc.icon} {item.what}
                 </span>
-                <div style={{display:"flex",gap:1,flexShrink:0}}>
+                <div style={{display:"flex",gap:1,flexShrink:0}} onClick={e=>e.stopPropagation()}>
                   <button onClick={()=>moveItem(idx,Math.max(0,idx-1))} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▲</button>
                   <button onClick={()=>moveItem(idx,Math.min(uurItems.length-1,idx+1))} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:12,padding:"0 3px",color:isActive?"#fff":T.textMuted,lineHeight:1}}>▼</button>
                   {verwijderBevestigId === item.id ? (
@@ -1060,6 +1061,11 @@ function TimelinePanel({ items, uur, onReorder, onDeleteVraag, onDeleteBevestig,
                   )}
                 </div>
               </div>
+              {item.type==="muziek" && (item.extra?.artiest || item.extra?.nummer) && (
+                <div style={{fontSize:11,color:isActive?"rgba(255,255,255,0.9)":tc.color,marginTop:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {[item.extra.artiest,item.extra.nummer].filter(Boolean).join(" — ")}
+                </div>
+              )}
               <div style={{fontSize:11,color:isActive?"rgba(255,255,255,0.8)":T.textLight,marginTop:2}}>
                 {item.timeBerekend||item.time} · {item.duurWerkelijkSec<60?item.duurWerkelijkSec+"s":toMMSS(item.duurWerkelijkSec)}
               </div>
@@ -1209,7 +1215,7 @@ export default function App() {
   }, [actieveUitzending]);
 
   // ─── Debounce → Firebase per-item schrijven ───────────────
-  const debouncedRundown = useDebounce(rundown, 1500);
+  const debouncedRundown = useDebounce(rundown, 500);
 
   useEffect(() => {
     if (!actieveUitzending) return;
@@ -1261,10 +1267,11 @@ export default function App() {
     }
 
     setSyncStatus("opslaan");
+    lastSyncedRef.current = currentKey; // direct gezet — voorkomt race met onValue-echo van je eigen save
 
     update(dbRef(db), paths)
-      .then(() => { lastSyncedRef.current = currentKey; setSyncStatus("live"); })
-      .catch(() => { setSyncStatus("fout"); }); // lastSyncedRef blijft ongewijzigd → volgende wijziging probeert opnieuw
+      .then(() => setSyncStatus("live"))
+      .catch(() => setSyncStatus("fout")); // lastSyncedRef blijft staan → volgende wijziging probeert opnieuw
 
   }, [debouncedRundown]);
 
