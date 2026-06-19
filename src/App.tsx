@@ -735,7 +735,7 @@ function TekstPopup({ open, label, value, onChange, onClose }) {
 // ════════════════════════════════════════════════════════════
 //  EditableField
 // ════════════════════════════════════════════════════════════
-function EF({ label, value, onChange, multiline=false, placeholder="", disabled=false, minHeight=240 }) {
+function EF({ label, value, onChange, multiline=false, placeholder="", disabled=false, minHeight=192 }) {
   const [popupOpen, setPopupOpen] = useState(false);
   const s={width:"100%",background:disabled?"transparent":"rgba(255,255,255,0.7)",border:disabled?"none":`1px solid #9CA3AF`,color:"#0A0C10",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
     lineHeight:"1.5",borderRadius:4,boxSizing:"border-box",resize:"vertical"};
@@ -791,10 +791,10 @@ function InterviewBlok({ item, upd, onDuurChange, readOnly }) {
       </div>
       <EF label="Introductietekst" value={e.intro}
         onChange={v=>{ upd("intro",v); berekenDuur(v, e.vragen); }}
-        multiline minHeight={350} placeholder="Schrijf hier de introductietekst…" disabled={readOnly}/>
+        multiline minHeight={280} placeholder="Schrijf hier de introductietekst…" disabled={readOnly}/>
       <EF label="Interviewvragen" value={e.vragen}
         onChange={v=>{ upd("vragen",v); berekenDuur(e.intro, v); }}
-        multiline minHeight={400} placeholder={"1. …\n2. …\n3. …"} disabled={readOnly}/>
+        multiline minHeight={320} placeholder={"1. …\n2. …\n3. …"} disabled={readOnly}/>
 
       <button onClick={()=>setUitklap(u=>!u)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",
         background:"transparent",border:"none",cursor:"pointer",fontSize:11,color:T.textMuted,fontWeight:600,marginBottom:4}}>
@@ -1511,15 +1511,6 @@ export default function App() {
         )}
         <div style={{flex:1}}/>
         <SyncBadge status={syncStatus}/>
-        {actieveUitzending && (
-          <button onClick={printRundown} style={{padding:"4px 10px",fontSize:10,fontWeight:700,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>🖨 Printen</button>
-        )}
-        {actieveUitzending && (
-          <button onClick={()=>setShowLeftSidebar(s=>!s)} title="Linker zijbalk in/uitklappen" style={{padding:"4px 8px",fontSize:13,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>◧</button>
-        )}
-        {actieveUitzending && (
-          <button onClick={()=>setShowRightSidebar(s=>!s)} title="Rechter zijbalk in/uitklappen" style={{padding:"4px 8px",fontSize:13,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>◨</button>
-        )}
         <div style={{fontSize:14,color:T.text,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>
           {String(now.getHours()).padStart(2,"0")}:{String(now.getMinutes()).padStart(2,"0")}:{String(now.getSeconds()).padStart(2,"0")}
         </div>
@@ -1532,6 +1523,15 @@ export default function App() {
           <button key={r} onClick={()=>setRole(r)} style={{padding:"4px 12px",borderRadius:20,border:"1px solid",fontSize:11,cursor:"pointer",transition:"all 0.15s",borderColor:role===r?roleColors[r]:T.border,background:role===r?`${roleColors[r]}15`:T.bg,color:role===r?roleColors[r]:"#1A1F2B",fontWeight:role===r?600:500}}>{r}</button>
         ))}
         <div style={{flex:1}}/>
+        {actieveUitzending && (
+          <button onClick={printRundown} style={{padding:"4px 10px",fontSize:10,fontWeight:700,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>🖨 Printen</button>
+        )}
+        {actieveUitzending && (
+          <button onClick={()=>setShowLeftSidebar(s=>!s)} title="Linker zijbalk in/uitklappen" style={{padding:"4px 8px",fontSize:13,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>◧</button>
+        )}
+        {actieveUitzending && (
+          <button onClick={()=>setShowRightSidebar(s=>!s)} title="Rechter zijbalk in/uitklappen" style={{padding:"4px 8px",fontSize:13,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>◨</button>
+        )}
         <span style={{fontSize:10,color:"#1F2937",letterSpacing:1,fontWeight:500}}>SIM</span>
         <input type="time" value={simTime} onChange={e=>setSimTime(e.target.value)} style={{background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"3px 8px",fontSize:11,borderRadius:4}}/>
         <button onClick={()=>setUseSim(s=>!s)} style={{padding:"3px 10px",fontSize:10,borderRadius:4,cursor:"pointer",fontWeight:500,background:useSim?`${BRAND.roze}15`:T.bg,border:`1px solid ${useSim?BRAND.roze:T.border}`,color:useSim?BRAND.roze:"#1F2937"}}>{useSim?"SIM AAN":"SIM UIT"}</button>
