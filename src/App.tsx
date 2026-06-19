@@ -1261,11 +1261,10 @@ export default function App() {
     }
 
     setSyncStatus("opslaan");
-    lastSyncedRef.current = currentKey; // optimistisch
 
     update(dbRef(db), paths)
-      .then(() => setSyncStatus("live"))
-      .catch(() => { setSyncStatus("fout"); lastSyncedRef.current = null; });
+      .then(() => { lastSyncedRef.current = currentKey; setSyncStatus("live"); })
+      .catch(() => { setSyncStatus("fout"); }); // lastSyncedRef blijft ongewijzigd → volgende wijziging probeert opnieuw
 
   }, [debouncedRundown]);
 
