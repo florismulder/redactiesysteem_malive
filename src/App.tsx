@@ -735,7 +735,7 @@ function TekstPopup({ open, label, value, onChange, onClose }) {
 // ════════════════════════════════════════════════════════════
 //  EditableField
 // ════════════════════════════════════════════════════════════
-function EF({ label, value, onChange, multiline=false, placeholder="", disabled=false, minHeight=480 }) {
+function EF({ label, value, onChange, multiline=false, placeholder="", disabled=false, minHeight=240 }) {
   const [popupOpen, setPopupOpen] = useState(false);
   const s={width:"100%",background:disabled?"transparent":"rgba(255,255,255,0.7)",border:disabled?"none":`1px solid #9CA3AF`,color:"#0A0C10",padding:"7px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",
     lineHeight:"1.5",borderRadius:4,boxSizing:"border-box",resize:"vertical"};
@@ -791,10 +791,10 @@ function InterviewBlok({ item, upd, onDuurChange, readOnly }) {
       </div>
       <EF label="Introductietekst" value={e.intro}
         onChange={v=>{ upd("intro",v); berekenDuur(v, e.vragen); }}
-        multiline minHeight={700} placeholder="Schrijf hier de introductietekst…" disabled={readOnly}/>
+        multiline minHeight={350} placeholder="Schrijf hier de introductietekst…" disabled={readOnly}/>
       <EF label="Interviewvragen" value={e.vragen}
         onChange={v=>{ upd("vragen",v); berekenDuur(e.intro, v); }}
-        multiline minHeight={800} placeholder={"1. …\n2. …\n3. …"} disabled={readOnly}/>
+        multiline minHeight={400} placeholder={"1. …\n2. …\n3. …"} disabled={readOnly}/>
 
       <button onClick={()=>setUitklap(u=>!u)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",
         background:"transparent",border:"none",cursor:"pointer",fontSize:11,color:T.textMuted,fontWeight:600,marginBottom:4}}>
@@ -1116,6 +1116,8 @@ export default function App() {
   const [verwijderBevestigId, setVerwijderBevestigId] = useState(null);
   const [herstelbaarItem, setHerstelbaarItem] = useState(null);
   const [uitzendingLoadFout, setUitzendingLoadFout] = useState(false);
+  const [showLeftSidebar, setShowLeftSidebar] = useState(true);
+  const [showRightSidebar, setShowRightSidebar] = useState(true);
   const herstelTimer = useRef(null);
   const itemRefs = useRef({});
 
@@ -1512,6 +1514,12 @@ export default function App() {
         {actieveUitzending && (
           <button onClick={printRundown} style={{padding:"4px 10px",fontSize:10,fontWeight:700,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>🖨 Printen</button>
         )}
+        {actieveUitzending && (
+          <button onClick={()=>setShowLeftSidebar(s=>!s)} title="Linker zijbalk in/uitklappen" style={{padding:"4px 8px",fontSize:13,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>◧</button>
+        )}
+        {actieveUitzending && (
+          <button onClick={()=>setShowRightSidebar(s=>!s)} title="Rechter zijbalk in/uitklappen" style={{padding:"4px 8px",fontSize:13,borderRadius:4,cursor:"pointer",background:T.bg,color:T.text,border:`1px solid ${T.border}`}}>◨</button>
+        )}
         <div style={{fontSize:14,color:T.text,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>
           {String(now.getHours()).padStart(2,"0")}:{String(now.getMinutes()).padStart(2,"0")}:{String(now.getSeconds()).padStart(2,"0")}
         </div>
@@ -1537,6 +1545,7 @@ export default function App() {
         )}
 
         {/* Sidebar */}
+        {showLeftSidebar && (
         <div style={{width:180,background:T.bgSidebar,borderRight:`1px solid ${T.border}`,flexShrink:0,overflowY:"auto"}}>
           <div style={{paddingTop:8}}>
             {allTabs.map(t=>(
@@ -1573,6 +1582,14 @@ export default function App() {
             ))}
           </div>
         </div>
+        )}
+        {!showLeftSidebar && actieveUitzending && (
+          <div style={{width:46,background:T.bgSidebar,borderRight:`1px solid ${T.border}`,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",paddingTop:10,gap:6}}>
+            <select value={tab} onChange={e=>setTab(e.target.value)} style={{writingMode:"vertical-rl",textOrientation:"mixed",width:30,height:120,fontSize:10,border:`1px solid ${T.border}`,borderRadius:4,background:T.bg,color:T.text,cursor:"pointer"}}>
+              {allTabs.map(t=><option key={t.id} value={t.id}>{t.l}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* Inhoud + panel */}
         <div style={{flex:1,display:"flex",overflow:"hidden"}}>
@@ -1615,7 +1632,7 @@ export default function App() {
             </>}
             {actieveUitzending && tab==="redactie" && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
           </div>
-          {actieveUitzending && isUurTab && role==="Eindredactie" && (
+          {actieveUitzending && isUurTab && role==="Eindredactie" && showRightSidebar && (
             <TimelinePanel items={rundown} uur={tabUur} activeId={getActiveId(tabUur)} onReorder={handleReorder}
               onDeleteVraag={handleDeleteVraag} onDeleteBevestig={handleDelete} onDeleteAnnuleer={handleDeleteAnnuleer}
               verwijderBevestigId={verwijderBevestigId} onAdd={(uur,type)=>handleAddItem(uur,type,"einde")} onScrollTo={scrollToItem}/>
