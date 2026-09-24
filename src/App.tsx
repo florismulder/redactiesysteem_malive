@@ -346,6 +346,7 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
   const [nieuwNaam, setNieuwNaam] = useState("");
   const [nieuwStart, setNieuwStart] = useState("12:00");
   const [nieuwEind, setNieuwEind] = useState("14:00");
+  const [rundownType, setRundownType] = useState("standaard"); // "standaard" of "leeg"
   const [aanmaken, setAanmaken] = useState(false);
   const [bevestigId, setBevestigId] = useState(null);
   const [kopieerInfo, setKopieerInfo] = useState(null);
@@ -361,7 +362,7 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
   function handleCreate() {
     if (!nieuwDatum) return;
     const naam = nieuwNaam || formatDatum(nieuwDatum);
-    onCreate({ datum: nieuwDatum, naam, startTijd: nieuwStart, eindTijd: nieuwEind });
+    onCreate({ datum: nieuwDatum, naam, startTijd: nieuwStart, eindTijd: nieuwEind, rundownType });
     setAanmaken(false);
   }
 
@@ -553,6 +554,19 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
                 <input type="text" value={nieuwNaam} onChange={e=>setNieuwNaam(e.target.value)}
                   placeholder={nieuwDatum ? formatDatum(nieuwDatum) : "Naam van de uitzending"}
                   style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:6,fontWeight:500}}>STARTPUNT</div>
+                <div style={{display:"flex",gap:8}}>
+                  {["standaard","leeg"].map(t=>(
+                    <button key={t} onClick={()=>setRundownType(t)} style={{flex:1,padding:"7px",fontSize:12,borderRadius:6,cursor:"pointer",fontWeight:rundownType===t?700:400,
+                      border:`1px solid ${rundownType===t?BRAND.roze:T.border}`,
+                      background:rundownType===t?`${BRAND.roze}12`:T.bg,
+                      color:rundownType===t?BRAND.roze:T.textMuted}}>
+                      {t==="standaard" ? "📋 Standaard draaiboek" : "⬜ Leeg beginnen"}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div style={{display:"flex",gap:8,marginTop:4}}>
                 <button onClick={()=>setAanmaken(false)} style={{flex:1,padding:"8px",background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,borderRadius:6,cursor:"pointer",fontSize:12}}>Annuleer</button>
@@ -1191,11 +1205,24 @@ export default function App() {
 
     const unsub = onValue(runRef, (snap) => {
       const fbData = snap.exists() ? snap.val() : null;
+      const wasFirst = isFirst;
       const baseVoorMerge = isFirst ? baseBerekend : currentRundownRef.current;
       isFirst = false;
 
       if (!fbData) {
-        lastSyncedRef.current = toSyncKey(baseBerekend);
+        if (wasFirst) {
+          // Echt nieuwe/lege uitzending — stel syncRef in zodat debounce straks mag opslaan
+          lastSyncedRef.current = toSyncKey(baseBerekend);
+          setSyncStatus("live");
+        }
+        // Bij tijdelijke Firebase-glitch (wasFirst=false) negeren we de lege terugkeer
+        return;
+      }
+
+      // Lege rundown: gebruiker koos "Leeg beginnen"
+      if (fbData._leeg) {
+        lastSyncedRef.current = toSyncKey([]);
+        setRundown([]);
         setSyncStatus("live");
         return;
       }
@@ -1278,8 +1305,13 @@ export default function App() {
   // ─── CRUD uitzendingen ────────────────────────────────────
   async function handleCreate(data) {
     const id = "uitz_" + Date.now();
-    const nieuw = { id, ...data, aantalUren: 2, aangemaakt: new Date().toISOString() };
+    const { rundownType, ...rest } = data;
+    const nieuw = { id, ...rest, aantalUren: 2, aangemaakt: new Date().toISOString() };
     await set(dbRef(db, `uitzendingen/${id}`), nieuw);
+    if (rundownType === "leeg") {
+      // Schrijf een lege marker zodat de load-effect weet: geen standaard vullen
+      await set(dbRef(db, `rundowns/${id}`), { _leeg: true, order: [], items: {} });
+    }
     setUitzendingen(prev => [...prev, nieuw]);
     handleSelectUitzending(nieuw);
   }
@@ -1384,8 +1416,9 @@ export default function App() {
   function handleTrackSelect(track) {
     if (!zoekId) return;
     recentlyEdited.current.set(String(zoekId), Date.now());
+    const betrouwbareDuur = (track.duurSec && track.duurSec >= 30) ? track.duurSec : null; // iTunes geeft soms onrealistisch korte duur terug
     setRundown(prev => herbereken(prev.map(r => r.id === zoekId ? {
-      ...r, duurWerkelijkSec: track.duurSec || r.duurWerkelijkSec, spotifyUri: track.uri,
+      ...r, duurWerkelijkSec: betrouwbareDuur || r.duurWerkelijkSec, spotifyUri: track.uri,
       extra: { ...r.extra, artiest: track.artiest || r.extra.artiest, nummer: track.nummer || r.extra.nummer },
     } : r), startTijd));
   }
@@ -1472,7 +1505,7 @@ export default function App() {
     const typeKleur={muziek:"#1565C0",jingle:"#C62828",tekst:"#CC00BB",nieuws:"#2E7D32",interview:"#E64A19",special:"#00796B"};
     const typeLabel={muziek:"MUZIEK",jingle:"JINGLE",tekst:"TEKST",nieuws:"NIEUWS",interview:"INTERVIEW",special:"SPECIAL"};
     const uren=[...new Set(rundown.map(i=>i.uur))].sort((a,b)=>a-b);
-    const html=`<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>Draaiboek — ${formatUitzendingNaam(uitz)}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Georgia',serif;font-size:11pt;color:#111;background:#fff}.header{padding:24px 32px 16px;border-bottom:3px solid #111;margin-bottom:24px}.header h1{font-size:22pt;font-weight:bold}.header .meta{font-size:10pt;color:#555;margin-top:6px;font-family:'Arial',sans-serif}.uur-header{font-family:'Arial',sans-serif;font-size:9pt;font-weight:bold;letter-spacing:3px;text-transform:uppercase;color:#888;padding:0 32px;margin:24px 0 8px}.blok{display:flex;gap:0;padding:10px 32px;border-bottom:1px solid #e8e8e8;page-break-inside:avoid}.blok-tijd{width:52px;flex-shrink:0;padding-top:2px}.blok-tijd .tijd{font-family:'Courier New',monospace;font-size:10pt;font-weight:bold;color:#111}.blok-tijd .duur{font-family:'Courier New',monospace;font-size:8pt;color:#888;margin-top:2px}.blok-balk{width:3px;flex-shrink:0;margin:0 12px;border-radius:2px}.blok-inhoud{flex:1}.blok-kop{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}.type-badge{font-family:'Arial',sans-serif;font-size:7pt;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;padding:2px 6px;border-radius:3px}.blok-naam{font-family:'Arial',sans-serif;font-size:11pt;font-weight:bold;color:#111}.veld{margin-top:5px}.veld .label{font-family:'Arial',sans-serif;font-size:8pt;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#888;display:block;margin-bottom:2px}.veld p{font-size:11pt;line-height:1.65;color:#222;white-space:pre-wrap}.muziek-titel{font-family:'Arial',sans-serif;font-size:12pt;font-weight:bold;color:#1565C0;margin-bottom:4px}.jingle-label{font-family:'Arial',sans-serif;font-size:10pt;color:#888;font-style:italic}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="header"><h1>${formatUitzendingNaam(uitz)}</h1><div class="meta">${formatDatum(uitz.datum)} · ${cleanTime(uitz.startTijd||'12:00')} – ${cleanTime(uitz.eindTijd||'14:00')} · ${aantalUren} uur</div></div>${uren.map(uur=>`<div class="uur-sectie"><div class="uur-header">Uur ${uur} — ${addSec(startTijd,(uur-1)*3600)} tot ${addSec(startTijd,uur*3600)}</div>${rundown.filter(i=>i.uur===uur).map(item=>{const kleur=typeKleur[item.type]||'#555';const inhoud=tekst(item);return`<div class="blok"><div class="blok-tijd"><div class="tijd">${item.timeBerekend||item.time}</div><div class="duur">${toMMSS(item.duurWerkelijkSec)}</div></div><div class="blok-balk" style="background:${kleur}"></div><div class="blok-inhoud"><div class="blok-kop"><span class="type-badge" style="background:${kleur}18;color:${kleur}">${typeLabel[item.type]||item.type.toUpperCase()}</span><span class="blok-naam">${item.extra._naam||item.what}</span></div>${inhoud}</div></div>`;}).join('')}</div>`).join('')}<script>window.onload=()=>window.print();</script></body></html>`;
+    const html=`<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>Draaiboek — ${formatUitzendingNaam(uitz)}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Arial',sans-serif;font-size:11pt;color:#111;background:#fff}.header{padding:24px 32px 16px;border-bottom:3px solid #111;margin-bottom:24px}.header h1{font-size:22pt;font-weight:bold}.header .meta{font-size:10pt;color:#555;margin-top:6px;font-family:'Arial',sans-serif}.uur-header{font-family:'Arial',sans-serif;font-size:9pt;font-weight:bold;letter-spacing:3px;text-transform:uppercase;color:#888;padding:0 32px;margin:24px 0 8px}.blok{display:flex;gap:0;padding:10px 32px;border-bottom:1px solid #e8e8e8;page-break-inside:avoid}.blok-tijd{width:52px;flex-shrink:0;padding-top:2px}.blok-tijd .tijd{font-family:'Courier New',monospace;font-size:10pt;font-weight:bold;color:#111}.blok-tijd .duur{font-family:'Courier New',monospace;font-size:8pt;color:#888;margin-top:2px}.blok-balk{width:3px;flex-shrink:0;margin:0 12px;border-radius:2px}.blok-inhoud{flex:1}.blok-kop{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}.type-badge{font-family:'Arial',sans-serif;font-size:7pt;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;padding:2px 6px;border-radius:3px}.blok-naam{font-family:'Arial',sans-serif;font-size:11pt;font-weight:bold;color:#111}.veld{margin-top:5px}.veld .label{font-family:'Arial',sans-serif;font-size:8pt;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#888;display:block;margin-bottom:2px}.veld p{font-size:11pt;line-height:1.65;color:#222;white-space:pre-wrap}.muziek-titel{font-family:'Arial',sans-serif;font-size:12pt;font-weight:bold;color:#1565C0;margin-bottom:4px}.jingle-label{font-family:'Arial',sans-serif;font-size:10pt;color:#888;font-style:italic}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="header"><h1>${formatUitzendingNaam(uitz)}</h1><div class="meta">${formatDatum(uitz.datum)} · ${cleanTime(uitz.startTijd||'12:00')} – ${cleanTime(uitz.eindTijd||'14:00')} · ${aantalUren} uur</div></div>${uren.map(uur=>`<div class="uur-sectie"><div class="uur-header">Uur ${uur} — ${addSec(startTijd,(uur-1)*3600)} tot ${addSec(startTijd,uur*3600)}</div>${rundown.filter(i=>i.uur===uur).map(item=>{const kleur=typeKleur[item.type]||'#555';const inhoud=tekst(item);return`<div class="blok"><div class="blok-tijd"><div class="tijd">${item.timeBerekend||item.time}</div><div class="duur">${toMMSS(item.duurWerkelijkSec)}</div></div><div class="blok-balk" style="background:${kleur}"></div><div class="blok-inhoud"><div class="blok-kop"><span class="type-badge" style="background:${kleur}18;color:${kleur}">${typeLabel[item.type]||item.type.toUpperCase()}</span><span class="blok-naam">${item.extra._naam||item.what}</span></div>${inhoud}</div></div>`;}).join('')}</div>`).join('')}<script>window.onload=()=>window.print();</script></body></html>`;
     const w=window.open('','_blank'); w.document.write(html); w.document.close();
   }
 
