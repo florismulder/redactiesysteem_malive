@@ -381,13 +381,13 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
   function handleKopieerClick(e, u) {
     e.stopPropagation();
     setBevestigId(null);
-    setKopieerInfo({ id: u.id, datum: "", naam: `Kopie van ${formatUitzendingNaam(u)}`, startTijd: cleanTime(u.startTijd||"12:00"), eindTijd: cleanTime(u.eindTijd||"14:00") });
+    setKopieerInfo({ id: u.id, datum: "", naam: `Kopie van ${formatUitzendingNaam(u)}`, startTijd: cleanTime(u.startTijd||"12:00"), eindTijd: cleanTime(u.eindTijd||"14:00"), leegKopie: false });
   }
 
   function handleKopieerBevestig(e) {
     e.stopPropagation();
     if (!kopieerInfo?.datum) return;
-    onCopy(kopieerInfo.id, { datum: kopieerInfo.datum, naam: kopieerInfo.naam, startTijd: kopieerInfo.startTijd, eindTijd: kopieerInfo.eindTijd });
+    onCopy(kopieerInfo.id, { datum: kopieerInfo.datum, naam: kopieerInfo.naam, startTijd: kopieerInfo.startTijd, eindTijd: kopieerInfo.eindTijd, leegKopie: kopieerInfo.leegKopie || false });
     setKopieerInfo(null);
   }
 
@@ -487,7 +487,11 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
                     <input type="text" value={kopieerInfo.naam} onChange={e=>setKopieerInfo(p=>({...p,naam:e.target.value}))}
                       style={{width:"100%",background:"#fff",border:`1px solid ${T.inputBorder}`,color:T.text,padding:"6px 8px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
                   </div>
-                  <div style={{display:"flex",gap:8}}>
+                  <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                    <button onClick={e=>{e.stopPropagation();setKopieerInfo(p=>({...p,leegKopie:!p.leegKopie}));}}
+                      style={{padding:"6px 12px",background:kopieerInfo.leegKopie?"#F3E8FF":"transparent",border:`1px solid ${kopieerInfo.leegKopie?BRAND.paars:T.border}`,color:kopieerInfo.leegKopie?BRAND.paars:T.textMuted,borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:kopieerInfo.leegKopie?700:400}}>
+                      {kopieerInfo.leegKopie ? "✓ Lege kopie" : "Lege kopie"}
+                    </button>
                     <button onClick={handleKopieerBevestig} disabled={!kopieerInfo.datum}
                       style={{padding:"6px 16px",background:kopieerInfo.datum?BRAND.gradient:"#E5E7EB",border:"none",color:kopieerInfo.datum?"#fff":T.textMuted,borderRadius:6,cursor:kopieerInfo.datum?"pointer":"default",fontSize:12,fontWeight:700}}>Kopiëren</button>
                     <button onClick={e=>{e.stopPropagation();setKopieerInfo(null);}}
@@ -1341,7 +1345,19 @@ export default function App() {
     await remove(dbRef(db, `redactie/${id}`));
   }
 
-  async function handleCopyUitzending(bronId, { datum, naam, startTijd: nieuweStart, eindTijd: nieuwEind }) {
+  function leegMaakRundownData(fbData) {
+    const tekstVelden = ['tekst','intro','berichten','vragen','artiest','nummer','feitje','wie','functie','tel','onderwerp','achtergrond','bronnen','verhaal','omschrijving','lp_naam','link'];
+    const result = {};
+    Object.entries(fbData).forEach(([key, item]) => {
+      if (!item || item._deleted) { result[key] = item; return; }
+      const leegExtra = { ...(item.extra || {}) };
+      tekstVelden.forEach(v => { if (v in leegExtra) leegExtra[v] = ''; });
+      result[key] = { ...item, extra: leegExtra };
+    });
+    return result;
+  }
+
+  async function handleCopyUitzending(bronId, { datum, naam, startTijd: nieuweStart, eindTijd: nieuwEind, leegKopie }) {
     const bron = uitzendingen.find(u => u.id === bronId);
     if (!bron) return;
     const nieuwId = "uitz_" + Date.now();
@@ -1355,7 +1371,10 @@ export default function App() {
     };
     await set(dbRef(db, `uitzendingen/${nieuwId}`), kopiee);
     const bronSnap = await get(dbRef(db, `rundowns/${bronId}`));
-    if (bronSnap.exists()) await set(dbRef(db, `rundowns/${nieuwId}`), bronSnap.val());
+    if (bronSnap.exists()) {
+      const rundownData = leegKopie ? leegMaakRundownData(bronSnap.val()) : bronSnap.val();
+      await set(dbRef(db, `rundowns/${nieuwId}`), rundownData);
+    }
     const redSnap = await get(dbRef(db, `redactie/${bronId}`));
     if (redSnap.exists()) await set(dbRef(db, `redactie/${nieuwId}`), redSnap.val());
     setUitzendingen(prev => [...prev, kopiee]);
@@ -1703,7 +1722,8 @@ export default function App() {
 // ════════════════════════════════════════════════════════════
 function RedactieTab({ uitzendingId, setSyncStatus }) {
   const [redactie, setRedactie] = useState([
-    {functie:"Eindredactie",taak:"Host 1 / Host 2 / Techniek",produceert:"De plaat en zijn verhaal",namen:[""]},
+    {functie:"Eindredactie",taak:"Host 1 / Host 2",produceert:"De plaat en zijn verhaal",namen:[""]},
+    {functie:"Techniek",taak:"Technicus",produceert:"Uitzending on air",namen:[""]},
     {functie:"Nieuwsredactie",taak:"Nieuwslezer",produceert:"Nieuws, Amsterdams nieuws",namen:[""]},
     {functie:"Interviewredactie",taak:"Interviewer",produceert:"Foto geïnterviewde",namen:[""]},
     {functie:"Muziekredactie",taak:"New Music / LP van de dag",produceert:"New Music overzicht",namen:[""]},
