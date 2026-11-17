@@ -187,6 +187,31 @@ function buildUurBase(uur, startTijd = "12:00") {
   }));
 }
 
+// ─── podcast basistemplate ────────────────────────────────
+const PODCAST_OFFSETS = [
+  { id:201, offset:0,    dur:15,  type:"jingle",    what:"Intro jingle",          who:["Eindredactie"], extra:{label:"Intro jingle"} },
+  { id:202, offset:15,   dur:60,  type:"tekst",     what:"Opening / welkom",      who:["Eindredactie"], extra:{tekst:"Welkom bij [naam podcast]. Ik ben [naam] en vandaag gaan we het hebben over..."} },
+  { id:203, offset:75,   dur:60,  type:"tekst",     what:"Introductie onderwerp", who:["Eindredactie"], extra:{tekst:"Wat is er precies aan de hand? Waarom is dit onderwerp interessant?"} },
+  { id:204, offset:135,  dur:300, type:"tekst",     what:"Segment 1",             who:["Eindredactie"], extra:{tekst:""} },
+  { id:205, offset:435,  dur:30,  type:"jingle",    what:"Tussenjingle",          who:["Eindredactie"], extra:{label:"Tussenjingle"} },
+  { id:206, offset:465,  dur:300, type:"tekst",     what:"Segment 2",             who:["Eindredactie"], extra:{tekst:""} },
+  { id:207, offset:765,  dur:300, type:"interview", what:"Interview / gesprek",   who:["Eindredactie"], extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""} },
+  { id:208, offset:1065, dur:240, type:"tekst",     what:"Segment 3 / conclusie", who:["Eindredactie"], extra:{tekst:""} },
+  { id:209, offset:1305, dur:90,  type:"tekst",     what:"Afsluiting",            who:["Eindredactie"], extra:{tekst:"Dat was het voor vandaag. Bedankt voor het luisteren naar [naam podcast]."} },
+  { id:210, offset:1395, dur:15,  type:"jingle",    what:"Outro jingle",          who:["Eindredactie"], extra:{label:"Outro jingle"} },
+];
+
+function buildPodcast() {
+  return PODCAST_OFFSETS.map(item => ({
+    ...item,
+    time: addSec("00:00", item.offset),
+    duurGeplandSec: item.dur,
+    duurWerkelijkSec: item.dur,
+    uur: 1,
+    spotifyUri: null,
+  }));
+}
+
 function herbereken(items, startTijd = "12:00") {
   const startSec = timeToSec(startTijd);
   const uren = [...new Set(items.map(i => i.uur))].sort((a, b) => a - b);
@@ -432,10 +457,13 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
                 style={{padding:"14px 24px",cursor:"pointer",display:"flex",alignItems:"center",gap:14,borderBottom: kopieerInfo?.id===u.id ? "none" : `1px solid ${T.border}`,transition:"background 0.1s"}}>
                 <div style={{width:10,height:10,borderRadius:"50%",background:BRAND.gradient,flexShrink:0}}/>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:14,fontWeight:600,color:T.text}}>{formatUitzendingNaam(u)}</div>
+                  <div style={{fontSize:14,fontWeight:600,color:T.text,display:"flex",alignItems:"center",gap:6}}>
+                    {formatUitzendingNaam(u)}
+                    {u.format==="podcast" && <span style={{fontSize:10,fontWeight:700,color:"#E64A19",background:"#FFF3EE",border:"1px solid #E64A19",borderRadius:4,padding:"1px 5px"}}>PODCAST</span>}
+                  </div>
                   <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>
-                    {formatDatum(u.datum)} · {cleanTime(u.startTijd||"12:00")} – {cleanTime(u.eindTijd||"14:00")}
-                    {u.aantalUren > 2 && <span style={{marginLeft:6,color:BRAND.paars,fontWeight:600}}>{u.aantalUren} uur</span>}
+                    {formatDatum(u.datum)}{u.format!=="podcast" && ` · ${cleanTime(u.startTijd||"12:00")} – ${cleanTime(u.eindTijd||"14:00")}`}
+                    {u.aantalUren > 2 && u.format!=="podcast" && <span style={{marginLeft:6,color:BRAND.paars,fontWeight:600}}>{u.aantalUren} uur</span>}
                   </div>
                 </div>
                 {bevestigId === u.id ? (
@@ -536,23 +564,32 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               <div style={{fontSize:11,color:T.textMuted,fontWeight:600,letterSpacing:1,textTransform:"uppercase"}}>Nieuwe uitzending</div>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8}}>
+              <div style={{display:"grid",gridTemplateColumns:rundownType==="podcast" ? "1fr" : "2fr 1fr 1fr",gap:8}}>
                 <div>
                   <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>DATUM</div>
                   <input type="date" value={nieuwDatum} onChange={e=>setNieuwDatum(e.target.value)}
                     style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
                 </div>
-                <div>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>START</div>
-                  <input type="time" value={nieuwStart} onChange={e=>setNieuwStart(e.target.value)}
-                    style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
-                </div>
-                <div>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>EIND</div>
-                  <input type="time" value={nieuwEind} onChange={e=>setNieuwEind(e.target.value)}
-                    style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
-                </div>
+                {rundownType !== "podcast" && (
+                  <>
+                    <div>
+                      <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>START</div>
+                      <input type="time" value={nieuwStart} onChange={e=>setNieuwStart(e.target.value)}
+                        style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>EIND</div>
+                      <input type="time" value={nieuwEind} onChange={e=>setNieuwEind(e.target.value)}
+                        style={{width:"100%",background:T.inputBg,border:`1px solid ${T.inputBorder}`,color:T.text,padding:"7px 10px",fontSize:12,borderRadius:6,boxSizing:"border-box"}}/>
+                    </div>
+                  </>
+                )}
               </div>
+              {rundownType === "podcast" && (
+                <div style={{fontSize:11,color:T.textMuted,background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px"}}>
+                  🎙 Podcast draaiboek — max 25 min — tijden starten op 00:00
+                </div>
+              )}
               <div>
                 <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>NAAM (optioneel)</div>
                 <input type="text" value={nieuwNaam} onChange={e=>setNieuwNaam(e.target.value)}
@@ -562,12 +599,12 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
               <div>
                 <div style={{fontSize:11,color:T.textMuted,marginBottom:6,fontWeight:500}}>STARTPUNT</div>
                 <div style={{display:"flex",gap:8}}>
-                  {["standaard","leeg"].map(t=>(
+                  {["standaard","leeg","podcast"].map(t=>(
                     <button key={t} onClick={()=>setRundownType(t)} style={{flex:1,padding:"7px",fontSize:12,borderRadius:6,cursor:"pointer",fontWeight:rundownType===t?700:400,
                       border:`1px solid ${rundownType===t?BRAND.roze:T.border}`,
                       background:rundownType===t?`${BRAND.roze}12`:T.bg,
                       color:rundownType===t?BRAND.roze:T.textMuted}}>
-                      {t==="standaard" ? "📋 Standaard draaiboek" : "⬜ Leeg beginnen"}
+                      {t==="standaard" ? "📋 Standaard" : t==="leeg" ? "⬜ Leeg" : "🎙 Podcast"}
                     </button>
                   ))}
                 </div>
@@ -1196,9 +1233,10 @@ export default function App() {
     recentlyEdited.current.clear();
 
     // Bouw basis-rundown
+    const isPodcast = actieveUitzending.format === "podcast";
     const n = actieveUitzending.aantalUren || 2;
-    let base = buildBase(startTijd);
-    for (let u = 3; u <= n; u++) base = [...base, ...buildUurBase(u, startTijd)];
+    let base = isPodcast ? buildPodcast() : buildBase(startTijd);
+    if (!isPodcast) for (let u = 3; u <= n; u++) base = [...base, ...buildUurBase(u, startTijd)];
     const baseBerekend = herbereken(base, startTijd);
     setRundown(baseBerekend);
     setSyncStatus("laden");
@@ -1310,11 +1348,22 @@ export default function App() {
   async function handleCreate(data) {
     const id = "uitz_" + Date.now();
     const { rundownType, ...rest } = data;
-    const nieuw = { id, ...rest, aantalUren: 2, aangemaakt: new Date().toISOString() };
+    const isPodcast = rundownType === "podcast";
+    const nieuw = {
+      id, ...rest,
+      aantalUren: 1,
+      aangemaakt: new Date().toISOString(),
+      ...(isPodcast ? { format: "podcast", startTijd: "00:00", eindTijd: "00:25" } : { aantalUren: 2 }),
+    };
     await set(dbRef(db, `uitzendingen/${id}`), nieuw);
     if (rundownType === "leeg") {
-      // Schrijf een lege marker zodat de load-effect weet: geen standaard vullen
       await set(dbRef(db, `rundowns/${id}`), { _leeg: true, order: [], items: {} });
+    } else if (isPodcast) {
+      const podcastBase = buildPodcast();
+      const fbItems = {};
+      podcastBase.forEach(item => { fbItems[String(item.id)] = itemToFb(item); });
+      const order = podcastBase.map(i => String(i.id));
+      await set(dbRef(db, `rundowns/${id}`), { items: fbItems, order });
     }
     setUitzendingen(prev => [...prev, nieuw]);
     handleSelectUitzending(nieuw);
@@ -1722,8 +1771,7 @@ export default function App() {
 // ════════════════════════════════════════════════════════════
 function RedactieTab({ uitzendingId, setSyncStatus }) {
   const [redactie, setRedactie] = useState([
-    {functie:"Eindredactie",taak:"Host 1 / Host 2",produceert:"De plaat en zijn verhaal",namen:[""]},
-    {functie:"Techniek",taak:"Technicus",produceert:"Uitzending on air",namen:[""]},
+    {functie:"Eindredactie",taak:"Host 1 / Host 2 / Techniek",produceert:"De plaat en zijn verhaal",namen:[""]},
     {functie:"Nieuwsredactie",taak:"Nieuwslezer",produceert:"Nieuws, Amsterdams nieuws",namen:[""]},
     {functie:"Interviewredactie",taak:"Interviewer",produceert:"Foto geïnterviewde",namen:[""]},
     {functie:"Muziekredactie",taak:"New Music / LP van de dag",produceert:"New Music overzicht",namen:[""]},
