@@ -962,7 +962,7 @@ const whoVis = {
   Muziekredactie:["Muziekredactie","Eindredactie"],
 };
 
-function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, onDeleteBevestig, onDeleteAnnuleer, verwijderBevestig, onRename, isActive, isPast }) {
+function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, onDeleteBevestig, onDeleteAnnuleer, verwijderBevestig, onRename, isActive, isPast, onInklap }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
   const readOnly = false;
@@ -992,7 +992,8 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, o
       <div style={{flex:1,background:tc.bg,borderRadius:"0 6px 6px 0",padding:"10px 14px",
         border:`1px solid ${tc.color}33`,borderLeft:"none",marginTop:4,marginBottom:4,
         boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:canEdit?8:0,
+        <div onClick={onInklap} title={onInklap?"Klik om in te klappen":undefined}
+          style={{display:"flex",alignItems:"center",gap:6,marginBottom:canEdit?8:0,cursor:onInklap?"pointer":"default",
           paddingBottom:canEdit?7:0,borderBottom:canEdit?`1px solid ${tc.color}33`:"none"}}>
           <span style={{fontSize:10,letterSpacing:1,color:tc.color,fontWeight:700,
             background:`${tc.color}15`,padding:"2px 7px",borderRadius:4}}>{tc.icon} {tc.label}</span>
@@ -1006,7 +1007,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, o
               <span style={{fontSize:13,color:"#0D0F12",fontWeight:600}}>{displayNaam}</span>
             )
           )}
-          <div style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
+          <div onClick={e=>e.stopPropagation()} style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end",cursor:"default"}}>
             {item.who.map(w=>(
               <span key={w} style={{fontSize:10,padding:"2px 7px",borderRadius:10,
                 background:`${roleColors[w]||"#6B7280"}18`,color:roleColors[w]||T.textMuted,
@@ -1025,6 +1026,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, o
               )
             )}
           </div>
+          {onInklap && <span style={{flexShrink:0,fontSize:12,color:tc.color,marginLeft:4}}>▲</span>}
         </div>
 
         {canEdit&&<>
@@ -1835,13 +1837,8 @@ export default function App() {
                   onFocusCapture={()=>{ if (open && handmatigOpen[item.id]!==true) setHandmatigOpen(p=>({...p,[item.id]:true})); }}
                   style={{scrollMarginTop:12,outline:highlightId===item.id?"2px solid #FF00E7":"none",outlineOffset:2,borderRadius:6,transition:"outline 0.3s"}}>
                   {open ? (<>
-                    {item.id!==liveId && (
-                      <div style={{display:"flex",justifyContent:"flex-end"}}>
-                        <button onClick={()=>setHandmatigOpen(p=>({...p,[item.id]:false}))}
-                          style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,cursor:"pointer",background:"transparent",border:"none",color:T.textMuted}}>▲ Inklappen</button>
-                      </div>
-                    )}
                     <ItemCard item={item} role={role}
+                      onInklap={item.id!==liveId ? ()=>setHandmatigOpen(p=>({...p,[item.id]:false})) : undefined}
                       onUpdate={handleUpdate} onDuurChange={handleDuurChange} onRename={handleRename}
                       onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
                       onDeleteVraag={role==="Eindredactie" ? handleDeleteVraag : null}
