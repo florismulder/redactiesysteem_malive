@@ -857,6 +857,32 @@ function TotaalBalk({ items, uur, startTijd, onKlik }) {
 }
 
 // ════════════════════════════════════════════════════════════
+//  BlokRegel — ingeklapt blok: één compacte regel
+//  Alleen weergave: leest het blok, schrijft niets weg.
+// ════════════════════════════════════════════════════════════
+function BlokRegel({ item, onOpen, isPast }) {
+  const tc = typeConfig[item.type] || typeConfig.tekst;
+  const naam = (item.extra && item.extra._naam) || item.what;
+  const tid = item.timeBerekend || item.time;
+  const sub = item.type === "muziek" && item.extra && (item.extra.artiest || item.extra.nummer)
+    ? [item.extra.artiest, item.extra.nummer].filter(Boolean).join(" — ") : "";
+  return (
+    <div onClick={onOpen} role="button" tabIndex={0} title="Klik om te openen"
+      onKeyDown={e=>{ if (e.key==="Enter" || e.key===" ") { e.preventDefault(); onOpen(); } }}
+      style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",marginBottom:4,borderRadius:6,cursor:"pointer",
+        background:tc.bg,border:`1px solid ${tc.color}33`,borderLeft:`4px solid ${tc.color}`,opacity:isPast?0.55:1}}>
+      <span style={{width:48,flexShrink:0,fontSize:12,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,color:"#374151"}}>{tid}</span>
+      <span style={{flexShrink:0,fontSize:10,letterSpacing:1,color:tc.color,fontWeight:700,background:`${tc.color}15`,padding:"2px 7px",borderRadius:4}}>{tc.icon} {tc.label}</span>
+      <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:"#0D0F12",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+        {naam}{sub ? ` · ${sub}` : ""}
+      </span>
+      <span style={{flexShrink:0,fontSize:11,fontWeight:500,color:"#2D3444"}}>{toMMSS(item.duurWerkelijkSec)}</span>
+      <span style={{flexShrink:0,fontSize:12,color:tc.color}}>▼</span>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
 //  TekstPopup
 // ════════════════════════════════════════════════════════════
 function TekstPopup({ open, label, value, onChange, onClose }) {
@@ -987,7 +1013,7 @@ const whoVis = {
   Muziekredactie:["Muziekredactie","Eindredactie"],
 };
 
-function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, onDeleteBevestig, onDeleteAnnuleer, verwijderBevestig, onRename, isActive, isPast }) {
+function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, onDeleteBevestig, onDeleteAnnuleer, verwijderBevestig, onRename, isActive, isPast, onInklap }) {
   const tc = typeConfig[item.type]||typeConfig.tekst;
   if (whoVis[role]&&!item.who.some(w=>(whoVis[role]).includes(w))) return null;
   const readOnly = false;
@@ -1017,7 +1043,8 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, o
       <div style={{flex:1,background:tc.bg,borderRadius:"0 6px 6px 0",padding:"10px 14px",
         border:`1px solid ${tc.color}33`,borderLeft:"none",marginTop:4,marginBottom:4,
         boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:canEdit?8:0,
+        <div onClick={onInklap} title={onInklap?"Klik om in te klappen":undefined}
+          style={{display:"flex",alignItems:"center",gap:6,marginBottom:canEdit?8:0,cursor:onInklap?"pointer":"default",
           paddingBottom:canEdit?7:0,borderBottom:canEdit?`1px solid ${tc.color}33`:"none"}}>
           <span style={{fontSize:10,letterSpacing:1,color:tc.color,fontWeight:700,
             background:`${tc.color}15`,padding:"2px 7px",borderRadius:4}}>{tc.icon} {tc.label}</span>
@@ -1031,7 +1058,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, o
               <span style={{fontSize:13,color:"#0D0F12",fontWeight:600}}>{displayNaam}</span>
             )
           )}
-          <div style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
+          <div onClick={e=>e.stopPropagation()} style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end",cursor:"default"}}>
             {item.who.map(w=>(
               <span key={w} style={{fontSize:10,padding:"2px 7px",borderRadius:10,
                 background:`${roleColors[w]||"#6B7280"}18`,color:roleColors[w]||T.textMuted,
@@ -1050,6 +1077,7 @@ function ItemCard({ item, role, onUpdate, onDuurChange, onZoek, onDeleteVraag, o
               )
             )}
           </div>
+          {onInklap && <span style={{flexShrink:0,fontSize:12,color:tc.color,marginLeft:4}}>▲</span>}
         </div>
 
         {canEdit&&<>
@@ -1288,6 +1316,8 @@ export default function App() {
   const [uitzendingLoadFout, setUitzendingLoadFout] = useState(false);
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
+  // Alleen eigen scherm: welke blokken deze gebruiker zelf open of dicht heeft gezet. Wordt nooit opgeslagen of gedeeld.
+  const [handmatigOpen, setHandmatigOpen] = useState({});
   const herstelTimer = useRef(null);
   const itemRefs = useRef({});
 
@@ -1486,6 +1516,7 @@ export default function App() {
     setSimTime(cleanTime(u.startTijd || "12:00"));
     setShowUitzendingModal(false);
     setTab("uur_1");
+    setHandmatigOpen({});
     window.history.pushState({}, '', `?id=${u.id}`);
   }
 
@@ -1640,9 +1671,12 @@ export default function App() {
   function handleReorder(newItems) { setRundown(herbereken(newItems, startTijd)); }
 
   function scrollToItem(id) {
+    setHandmatigOpen(p => ({ ...p, [id]: true }));
     setHighlightId(id);
-    const el = itemRefs.current[id];
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => {
+      const el = itemRefs.current[id];
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
     setTimeout(() => setHighlightId(null), 2000);
   }
 
@@ -1713,6 +1747,27 @@ export default function App() {
   const uurTabs = Array.from({ length: aantalUren }, (_, i) => ({ id: `uur_${i+1}`, l: `UUR ${i+1}`, s: uurLabel(i+1) }));
   const allTabs = [...uurTabs, { id: "redactie", l: "REDACTIE", s: "" }];
   const currentItems = isUurTab ? rundown.filter(i => i.uur === tabUur) : [];
+  const itemZichtbaar = it => !(whoVis[role] && !it.who.some(w => whoVis[role].includes(w)));
+  const eersteZichtbaarId = (currentItems.find(itemZichtbaar) || {}).id;
+  const liveUur = isUurTab && curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur) + 3600;
+  const liveId = liveUur ? getActiveId(tabUur) : null;
+  // Eigen keuze telt altijd, ook voor het live blok. Zonder keuze staat het live blok open.
+  // Buiten de live uitzending staat alleen het eerste blok open.
+  function blokOpen(it) {
+    if (handmatigOpen[it.id] !== undefined) return handmatigOpen[it.id];
+    if (it.id === liveId) return true;
+    return !liveUur && it.id === eersteZichtbaarId;
+  }
+  // Komt een blok aan de beurt, dan opent het vanzelf, ook na een eerdere keuze van deze gebruiker.
+  useEffect(() => {
+    if (!liveId) return;
+    setHandmatigOpen(p => {
+      if (p[liveId] === undefined) return p;
+      const n = { ...p };
+      delete n[liveId];
+      return n;
+    });
+  }, [liveId]);
 
   return (
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
@@ -1842,19 +1897,36 @@ export default function App() {
                 </div>
               </div>
               <TotaalBalk items={rundown} uur={tabUur} startTijd={startTijd} onKlik={scrollToItem}/>
-              {currentItems.map(item=>(
-                <div key={item.id} ref={el=>itemRefs.current[item.id]=el} style={{scrollMarginTop:12,outline:highlightId===item.id?"2px solid #FF00E7":"none",outlineOffset:2,borderRadius:6,transition:"outline 0.3s"}}>
-                  <ItemCard item={item} role={role}
-                    onUpdate={handleUpdate} onDuurChange={handleDuurChange} onRename={handleRename}
-                    onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
-                    onDeleteVraag={role==="Eindredactie" ? handleDeleteVraag : null}
-                    onDeleteBevestig={()=>handleDelete(verwijderBevestigId)}
-                    onDeleteAnnuleer={handleDeleteAnnuleer}
-                    verwijderBevestig={verwijderBevestigId===item.id}
-                    isActive={getActiveId(tabUur)===item.id}
-                    isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
+              <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:6}}>
+                <button onClick={()=>setHandmatigOpen(p=>{ const n={...p}; currentItems.forEach(i=>{ n[i.id]=true; }); return n; })}
+                  style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:4,cursor:"pointer",background:"transparent",border:`1px solid ${T.borderDark}`,color:T.textMuted}}>Alles open</button>
+                <button onClick={()=>setHandmatigOpen(p=>{ const n={...p}; currentItems.forEach(i=>{ n[i.id]=false; }); return n; })}
+                  style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:4,cursor:"pointer",background:"transparent",border:`1px solid ${T.borderDark}`,color:T.textMuted}}>Alles dicht</button>
+              </div>
+              {currentItems.map(item=>{
+                if (!itemZichtbaar(item)) return null;
+                const open = blokOpen(item);
+                return (
+                <div key={item.id} ref={el=>itemRefs.current[item.id]=el}
+                  style={{scrollMarginTop:12,outline:highlightId===item.id?"2px solid #FF00E7":"none",outlineOffset:2,borderRadius:6,transition:"outline 0.3s"}}>
+                  {open ? (<>
+                    <ItemCard item={item} role={role}
+                      onInklap={()=>setHandmatigOpen(p=>({...p,[item.id]:false}))}
+                      onUpdate={handleUpdate} onDuurChange={handleDuurChange} onRename={handleRename}
+                      onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
+                      onDeleteVraag={role==="Eindredactie" ? handleDeleteVraag : null}
+                      onDeleteBevestig={()=>handleDelete(verwijderBevestigId)}
+                      onDeleteAnnuleer={handleDeleteAnnuleer}
+                      verwijderBevestig={verwijderBevestigId===item.id}
+                      isActive={getActiveId(tabUur)===item.id}
+                      isPast={timeToSec(item.timeBerekend||item.time)<curSec}/>
+                  </>) : (
+                    <BlokRegel item={item} isPast={timeToSec(item.timeBerekend||item.time)<curSec}
+                      onOpen={()=>setHandmatigOpen(p=>({...p,[item.id]:true}))}/>
+                  )}
                 </div>
-              ))}
+                );
+              })}
               {role==="Eindredactie" && <ToevoegenKnop uur={tabUur} onAdd={handleAddItem}/>}
             </>}
             {actieveUitzending && tab==="redactie" && <RedactieTab uitzendingId={actieveUitzending.id} setSyncStatus={setSyncStatus}/>}
