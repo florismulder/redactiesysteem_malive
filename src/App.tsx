@@ -1465,6 +1465,7 @@ export default function App() {
     setSimTime(cleanTime(u.startTijd || "12:00"));
     setShowUitzendingModal(false);
     setTab("uur_1");
+    setHandmatigOpen({});
     window.history.pushState({}, '', `?id=${u.id}`);
   }
 
@@ -1845,7 +1846,6 @@ export default function App() {
                 const open = blokOpen(item);
                 return (
                 <div key={item.id} ref={el=>itemRefs.current[item.id]=el}
-                  onFocusCapture={()=>{ if (open && handmatigOpen[item.id]!==true) setHandmatigOpen(p=>({...p,[item.id]:true})); }}
                   style={{scrollMarginTop:12,outline:highlightId===item.id?"2px solid #FF00E7":"none",outlineOffset:2,borderRadius:6,transition:"outline 0.3s"}}>
                   {open ? (<>
                     <ItemCard item={item} role={role}
