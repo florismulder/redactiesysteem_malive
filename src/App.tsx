@@ -748,6 +748,64 @@ function DriftBalk({ items, uur, startTijd }) {
 }
 
 // ════════════════════════════════════════════════════════════
+//  TotaalBalk — overzicht van het hele uur, altijd zichtbaar
+//  Alleen weergave: leest de blokken, schrijft niets weg.
+// ════════════════════════════════════════════════════════════
+function TotaalBalk({ items, uur, startTijd, onKlik }) {
+  const uurItems = items.filter(i => i.uur === uur);
+  const drift = driftSec(items, uur, startTijd);
+  const abs = Math.round(Math.abs(drift));
+  const startSec = timeToSec(startTijd||"12:00");
+  const uurStartTijd = addSec("00:00", startSec + (uur - 1) * 3600);
+  const uurEindTijd = addSec("00:00", startSec + uur * 3600);
+  const totaal = uurItems.reduce((s, i) => s + (i.duurWerkelijkSec||0), 0);
+  const schaal = Math.max(3600, totaal);
+  const ok = abs < 5;
+  const tekort = drift < 0;
+  const kleur = ok ? "#047857" : tekort ? "#B45309" : "#B91C1C";
+  const achtergrond = ok ? "#ECFDF5" : tekort ? "#FFF7ED" : "#FEF2F2";
+  const rand = ok ? "#6EE7B7" : tekort ? "#FDBA74" : "#FCA5A5";
+  const tijdTekst = s => {
+    const m = Math.floor(s/60), r = s%60;
+    return m>0 ? (r>0 ? `${m} min ${r} sec` : `${m} min`) : `${r} sec`;
+  };
+  const kop = ok ? "Het uur klopt" : tekort ? `Je mist nog ${tijdTekst(abs)}` : `Je zit ${tijdTekst(abs)} over`;
+  const uitleg = ok
+    ? `${uurStartTijd} tot ${uurEindTijd}`
+    : `Het uur eindigt nu om ${addSec(uurEindTijd, drift)} in plaats van ${uurEindTijd}`;
+  return (
+    <div style={{position:"sticky",top:0,zIndex:20,background:T.bg,paddingBottom:10,marginBottom:4}}>
+      <div style={{padding:"10px 14px",borderRadius:8,background:achtergrond,border:`2px solid ${rand}`}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:12,flexWrap:"wrap",marginBottom:8}}>
+          <span style={{fontSize:20,fontWeight:700,color:kleur}}>{ok?"✓ ":"⚠ "}{kop}</span>
+          <span style={{fontSize:13,fontWeight:500,color:kleur}}>{uitleg}</span>
+        </div>
+        <div style={{position:"relative",display:"flex",height:34,borderRadius:6,overflow:"hidden",
+          border:`1px solid ${T.borderDark}`,
+          background:"repeating-linear-gradient(45deg,#E5E7EB,#E5E7EB 6px,#F3F4F6 6px,#F3F4F6 12px)"}}>
+          {uurItems.map(item => {
+            const tc = typeConfig[item.type] || typeConfig.tekst;
+            const dur = item.duurWerkelijkSec || 0;
+            return (
+              <div key={item.id} onClick={()=>onKlik&&onKlik(item.id)}
+                title={`${item.what||tc.label} · ${toMMSS(dur)}`}
+                style={{width:`${dur/schaal*100}%`,flexShrink:0,background:tc.color,borderRight:"1px solid #fff",cursor:"pointer"}}/>
+            );
+          })}
+          {totaal > 3600 && (
+            <div style={{position:"absolute",left:`${3600/schaal*100}%`,top:0,bottom:0,width:3,background:"#000"}}/>
+          )}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:4,fontSize:11,fontWeight:600,color:T.textMuted}}>
+          <span>{uurStartTijd}</span>
+          <span>{uurEindTijd}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
 //  TekstPopup
 // ════════════════════════════════════════════════════════════
 function TekstPopup({ open, label, value, onChange, onClose }) {
@@ -1721,7 +1779,7 @@ export default function App() {
                   <div style={{height:"100%",borderRadius:2,background:BRAND.gradient,transition:"width 1s linear",width:`${pct(tabUur)}%`}}/>
                 </div>
               </div>
-              <DriftBalk items={rundown} uur={tabUur} startTijd={startTijd}/>
+              <TotaalBalk items={rundown} uur={tabUur} startTijd={startTijd} onKlik={scrollToItem}/>
               {currentItems.map(item=>(
                 <div key={item.id} ref={el=>itemRefs.current[item.id]=el} style={{scrollMarginTop:12,outline:highlightId===item.id?"2px solid #FF00E7":"none",outlineOffset:2,borderRadius:6,transition:"outline 0.3s"}}>
                   <ItemCard item={item} role={role}
