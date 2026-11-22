@@ -97,6 +97,36 @@ function formatDatum(dateStr) {
   return str;
 }
 
+// Datum van een uitzending als Date, met dezelfde regels als formatDatum. Geen leesbare datum geeft null.
+function uitzendingDatum(u) {
+  const str = String((u && u.datum) || "").trim();
+  if (!str) return null;
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, y, m, day] = isoMatch.map(Number);
+    const d = new Date(y, m-1, day);
+    if (str.includes("T")) {
+      const hour = parseInt((str.split("T")[1]||"").split(":")[0]||"0");
+      if (hour >= 22) d.setDate(d.getDate()+1);
+    }
+    return d;
+  }
+  const d = new Date(str);
+  return !isNaN(d.getTime()) && d.getFullYear() > 1900 ? d : null;
+}
+
+// Archief: eigen keuze (gearchiveerd true of false) gaat voor. Anders archief als de datum vóór vandaag ligt.
+// Een uitzending zonder leesbare datum blijft altijd zichtbaar.
+function inArchief(u) {
+  if (u.gearchiveerd === true) return true;
+  if (u.gearchiveerd === false) return false;
+  const d = uitzendingDatum(u);
+  if (!d) return false;
+  const vandaag = new Date();
+  vandaag.setHours(0,0,0,0);
+  return d < vandaag;
+}
+
 function formatUitzendingNaam(u) {
   if (!u) return "";
   const naam = u.naam || "";
@@ -366,7 +396,8 @@ function SyncBadge({ status }) {
 // ════════════════════════════════════════════════════════════
 //  UitzendingModal
 // ════════════════════════════════════════════════════════════
-function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDelete, onCopy, onRename, laadFout, onHerlaad }) {
+function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDelete, onCopy, onRename, onArchiveer, laadFout, onHerlaad }) {
+  const [archiefOpen, setArchiefOpen] = useState(false);
   const [nieuwDatum, setNieuwDatum] = useState("");
   const [nieuwNaam, setNieuwNaam] = useState("");
   const [nieuwStart, setNieuwStart] = useState("12:00");
@@ -417,6 +448,13 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
   }
 
   if (!open) return null;
+  const actieveLijst = uitzendingen.filter(u => !inArchief(u));
+  const archiefLijst = uitzendingen.filter(u => inArchief(u)).reverse();
+  const weergaveLijst = [
+    ...actieveLijst,
+    ...(archiefLijst.length > 0 ? [{ __archiefKop: true, aantal: archiefLijst.length }] : []),
+    ...(archiefOpen ? archiefLijst : []),
+  ];
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{background:"#fff",borderRadius:12,width:540,maxHeight:"80vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
@@ -449,7 +487,15 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
               )}
             </div>
           )}
-          {uitzendingen.map(u => (
+          {weergaveLijst.map(u => u.__archiefKop ? (
+            <div key="archief-kop" onClick={()=>setArchiefOpen(o=>!o)} role="button" tabIndex={0}
+              onKeyDown={e=>{ if (e.key==="Enter" || e.key===" ") { e.preventDefault(); setArchiefOpen(o=>!o); } }}
+              style={{padding:"10px 24px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,background:"#F3F4F6",
+                borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,fontSize:12,fontWeight:700,color:T.textMuted}}>
+              <span>🗄 Archief ({u.aantal})</span>
+              <span style={{marginLeft:"auto"}}>{archiefOpen ? "▲" : "▼"}</span>
+            </div>
+          ) : (
             <div key={u.id}>
               <div onClick={()=>{ setBevestigId(null); setKopieerInfo(null); onSelect(u); }}
                 onMouseEnter={e=>e.currentTarget.style.background="#F9FAFB"}
@@ -482,6 +528,11 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
                       style={{background:"transparent",border:`1px solid ${T.border}`,color:BRAND.paars,borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}}
                       onMouseEnter={e=>e.currentTarget.style.opacity="1"}
                       onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>⧉</button>
+                    <button onClick={e=>{ e.stopPropagation(); onArchiveer(u.id, !inArchief(u)); }}
+                      title={inArchief(u) ? "Terugzetten uit archief" : "Naar archief"}
+                      style={{background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}}
+                      onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+                      onMouseLeave={e=>e.currentTarget.style.opacity="0.6"}>{inArchief(u) ? "↩" : "🗄"}</button>
                     <button onClick={e=>handleDeleteClick(e, u.id)} title="Uitzending verwijderen"
                       style={{background:"transparent",border:`1px solid ${T.border}`,color:"#EF4444",borderRadius:4,cursor:"pointer",fontSize:12,padding:"3px 7px",opacity:0.6,lineHeight:1}}
                       onMouseEnter={e=>e.currentTarget.style.opacity="1"}
@@ -1494,6 +1545,17 @@ export default function App() {
     update(dbRef(db, `uitzendingen/${id}`), { naam: nieuweNaam });
   }
 
+  // Archiveren of terugzetten. Schrijft alleen het veld gearchiveerd bij deze uitzending, de rundown blijft ongemoeid.
+  // Lukt het opslaan niet, dan gaat het scherm terug naar de vorige stand.
+  function handleArchiveerUitzending(id, waarde) {
+    const oud = (uitzendingen.find(u => u.id === id) || {}).gearchiveerd;
+    setUitzendingen(prev => prev.map(u => u.id === id ? { ...u, gearchiveerd: waarde } : u));
+    update(dbRef(db, `uitzendingen/${id}`), { gearchiveerd: waarde }).catch(() => {
+      setUitzendingen(prev => prev.map(u => u.id === id ? { ...u, gearchiveerd: oud } : u));
+      window.alert("Archiveren is niet gelukt. Er is niets veranderd. Probeer het later opnieuw.");
+    });
+  }
+
   function handleVoegUurToe() {
     if (!actieveUitzending) return;
     const nieuweUur = aantalUren + 1;
@@ -1809,7 +1871,7 @@ export default function App() {
         onSelect={handleSelectUitzending} onCreate={handleCreate}
         onClose={uitzendingen.length>0?()=>setShowUitzendingModal(false):null}
         onDelete={handleDeleteUitzending} onCopy={handleCopyUitzending}
-        onRename={handleRenameUitzending} laadFout={uitzendingLoadFout} onHerlaad={laadUitzendingen}/>
+        onRename={handleRenameUitzending} onArchiveer={handleArchiveerUitzending} laadFout={uitzendingLoadFout} onHerlaad={laadUitzendingen}/>
       <ZoekModal open={zoekOpen} onClose={()=>setZoekOpen(false)} onSelect={handleTrackSelect}/>
 
       {herstelbaarItem && (
