@@ -1688,12 +1688,23 @@ export default function App() {
   const eersteZichtbaarId = (currentItems.find(itemZichtbaar) || {}).id;
   const liveUur = isUurTab && curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur) + 3600;
   const liveId = liveUur ? getActiveId(tabUur) : null;
-  // Live blok altijd open. Anders telt de eigen keuze. Buiten de live uitzending staat alleen het eerste blok open.
+  // Eigen keuze telt altijd, ook voor het live blok. Zonder keuze staat het live blok open.
+  // Buiten de live uitzending staat alleen het eerste blok open.
   function blokOpen(it) {
-    if (it.id === liveId) return true;
     if (handmatigOpen[it.id] !== undefined) return handmatigOpen[it.id];
+    if (it.id === liveId) return true;
     return !liveUur && it.id === eersteZichtbaarId;
   }
+  // Komt een blok aan de beurt, dan opent het vanzelf, ook na een eerdere keuze van deze gebruiker.
+  useEffect(() => {
+    if (!liveId) return;
+    setHandmatigOpen(p => {
+      if (p[liveId] === undefined) return p;
+      const n = { ...p };
+      delete n[liveId];
+      return n;
+    });
+  }, [liveId]);
 
   return (
     <div style={{fontFamily:"'Inter','Segoe UI',sans-serif",background:T.bg,minHeight:"100vh",color:T.text}}>
@@ -1838,7 +1849,7 @@ export default function App() {
                   style={{scrollMarginTop:12,outline:highlightId===item.id?"2px solid #FF00E7":"none",outlineOffset:2,borderRadius:6,transition:"outline 0.3s"}}>
                   {open ? (<>
                     <ItemCard item={item} role={role}
-                      onInklap={item.id!==liveId ? ()=>setHandmatigOpen(p=>({...p,[item.id]:false})) : undefined}
+                      onInklap={()=>setHandmatigOpen(p=>({...p,[item.id]:false}))}
                       onUpdate={handleUpdate} onDuurChange={handleDuurChange} onRename={handleRename}
                       onZoek={id=>{setZoekId(id);setZoekOpen(true);}}
                       onDeleteVraag={role==="Eindredactie" ? handleDeleteVraag : null}
