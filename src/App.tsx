@@ -825,33 +825,28 @@ function TotaalBalk({ items, uur, startTijd, onKlik }) {
     ? `${uurStartTijd} tot ${uurEindTijd}`
     : `Het uur eindigt nu om ${addSec(uurEindTijd, drift)} in plaats van ${uurEindTijd}`;
   return (
-    <div style={{position:"sticky",top:0,zIndex:20,background:T.bg,paddingBottom:10,marginBottom:4}}>
-      <div style={{padding:"10px 14px",borderRadius:8,background:achtergrond,border:`2px solid ${rand}`}}>
-        <div style={{display:"flex",alignItems:"baseline",gap:12,flexWrap:"wrap",marginBottom:8}}>
-          <span style={{fontSize:20,fontWeight:700,color:kleur}}>{ok?"✓ ":"⚠ "}{kop}</span>
-          <span style={{fontSize:13,fontWeight:500,color:kleur}}>{uitleg}</span>
-        </div>
-        <div style={{position:"relative",display:"flex",height:34,borderRadius:6,overflow:"hidden",
-          border:`1px solid ${T.borderDark}`,
-          background:"repeating-linear-gradient(45deg,#E5E7EB,#E5E7EB 6px,#F3F4F6 6px,#F3F4F6 12px)"}}>
+    <div style={{position:"sticky",top:0,zIndex:20,background:T.bg,paddingBottom:6,marginBottom:2}}>
+      <div title={uitleg} style={{display:"flex",alignItems:"center",gap:10,padding:"5px 10px",borderRadius:6,
+        background:ok?T.bg:achtergrond,border:`1px solid ${ok?T.border:rand}`}}>
+        <span style={{flexShrink:0,fontSize:12,fontWeight:600,color:kleur,whiteSpace:"nowrap"}}>{ok?"✓ ":"⚠ "}{kop}</span>
+        <span style={{flexShrink:0,fontSize:10,fontWeight:500,color:T.textMuted,fontFamily:"'IBM Plex Mono',monospace"}}>{uurStartTijd}</span>
+        <div style={{position:"relative",flex:1,minWidth:60,display:"flex",height:6,borderRadius:3,overflow:"hidden",background:"#E5E7EB"}}>
           {uurItems.map(item => {
             const tc = typeConfig[item.type] || typeConfig.tekst;
             const dur = item.duurWerkelijkSec || 0;
             return (
               <div key={item.id} onClick={()=>onKlik&&onKlik(item.id)}
                 title={`${item.what||tc.label} · ${toMMSS(dur)}`}
-                style={{width:`${dur/schaal*100}%`,flexShrink:0,background:tc.color,borderRight:"1px solid #fff",cursor:"pointer"}}/>
+                style={{width:`${dur/schaal*100}%`,flexShrink:0,background:tc.color,opacity:0.7,borderRight:"1px solid #fff",cursor:"pointer"}}/>
             );
           })}
           {totaal > 3600 && (
-            <div style={{position:"absolute",left:`${3600/schaal*100}%`,top:0,bottom:0,width:3,background:"#000"}}/>
+            <div style={{position:"absolute",left:`${3600/schaal*100}%`,top:0,bottom:0,width:2,background:"#000"}}/>
           )}
         </div>
-        <div style={{display:"flex",justifyContent:"space-between",marginTop:4,fontSize:11,fontWeight:600,color:T.textMuted}}>
-          <span>{uurStartTijd}</span>
-          <span>{uurEindTijd}</span>
-        </div>
+        <span style={{flexShrink:0,fontSize:10,fontWeight:500,color:T.textMuted,fontFamily:"'IBM Plex Mono',monospace"}}>{uurEindTijd}</span>
       </div>
+      {!ok && <div style={{fontSize:11,color:kleur,marginTop:3,paddingLeft:10}}>{uitleg}</div>}
     </div>
   );
 }
@@ -1748,15 +1743,12 @@ export default function App() {
   const allTabs = [...uurTabs, { id: "redactie", l: "REDACTIE", s: "" }];
   const currentItems = isUurTab ? rundown.filter(i => i.uur === tabUur) : [];
   const itemZichtbaar = it => !(whoVis[role] && !it.who.some(w => whoVis[role].includes(w)));
-  const eersteZichtbaarId = (currentItems.find(itemZichtbaar) || {}).id;
   const liveUur = isUurTab && curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur) + 3600;
   const liveId = liveUur ? getActiveId(tabUur) : null;
-  // Eigen keuze telt altijd, ook voor het live blok. Zonder keuze staat het live blok open.
-  // Buiten de live uitzending staat alleen het eerste blok open.
+  // Alle blokken starten open. Eigen keuze van deze gebruiker (inklappen) telt daarna.
   function blokOpen(it) {
     if (handmatigOpen[it.id] !== undefined) return handmatigOpen[it.id];
-    if (it.id === liveId) return true;
-    return !liveUur && it.id === eersteZichtbaarId;
+    return true;
   }
   // Komt een blok aan de beurt, dan opent het vanzelf, ook na een eerdere keuze van deze gebruiker.
   useEffect(() => {
