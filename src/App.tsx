@@ -220,15 +220,15 @@ function buildUurBase(uur, startTijd = "12:00") {
 // ─── podcast basistemplate ────────────────────────────────
 const PODCAST_OFFSETS = [
   { id:201, offset:0,    dur:15,  type:"jingle",    what:"Intro jingle",          who:["Eindredactie"], extra:{label:"Intro jingle"} },
-  { id:202, offset:15,   dur:60,  type:"tekst",     what:"Opening / welkom",      who:["Eindredactie"], extra:{tekst:"Welkom bij [naam podcast]. Ik ben [naam] en vandaag gaan we het hebben over..."} },
-  { id:203, offset:75,   dur:60,  type:"tekst",     what:"Introductie onderwerp", who:["Eindredactie"], extra:{tekst:"Wat is er precies aan de hand? Waarom is dit onderwerp interessant?"} },
-  { id:204, offset:135,  dur:300, type:"tekst",     what:"Segment 1",             who:["Eindredactie"], extra:{tekst:""} },
-  { id:205, offset:435,  dur:30,  type:"jingle",    what:"Tussenjingle",          who:["Eindredactie"], extra:{label:"Tussenjingle"} },
-  { id:206, offset:465,  dur:300, type:"tekst",     what:"Segment 2",             who:["Eindredactie"], extra:{tekst:""} },
-  { id:207, offset:765,  dur:300, type:"interview", what:"Interview / gesprek",   who:["Eindredactie"], extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""} },
-  { id:208, offset:1065, dur:240, type:"tekst",     what:"Segment 3 / conclusie", who:["Eindredactie"], extra:{tekst:""} },
-  { id:209, offset:1305, dur:90,  type:"tekst",     what:"Afsluiting",            who:["Eindredactie"], extra:{tekst:"Dat was het voor vandaag. Bedankt voor het luisteren naar [naam podcast]."} },
-  { id:210, offset:1395, dur:15,  type:"jingle",    what:"Outro jingle",          who:["Eindredactie"], extra:{label:"Outro jingle"} },
+  { id:202, offset:15,   dur:45,  type:"tekst",     what:"Opening / welkom",      who:["Eindredactie"], extra:{tekst:"Welkom bij [naam podcast]. Ik ben [naam] en vandaag gaan we het hebben over..."} },
+  { id:203, offset:60,   dur:45,  type:"tekst",     what:"Introductie onderwerp", who:["Eindredactie"], extra:{tekst:"Wat is er precies aan de hand? Waarom is dit onderwerp interessant?"} },
+  { id:204, offset:105,  dur:180, type:"tekst",     what:"Segment 1",             who:["Eindredactie"], extra:{tekst:""} },
+  { id:205, offset:285,  dur:15,  type:"jingle",    what:"Tussenjingle",          who:["Eindredactie"], extra:{label:"Tussenjingle"} },
+  { id:206, offset:300,  dur:180, type:"tekst",     what:"Segment 2",             who:["Eindredactie"], extra:{tekst:""} },
+  { id:207, offset:480,  dur:240, type:"interview", what:"Interview / gesprek",   who:["Eindredactie"], extra:{wie:"",type:"Studio",tel:"",functie:"",onderwerp:"",intro:"",vragen:"",achtergrond:"",bronnen:""} },
+  { id:208, offset:720,  dur:90,  type:"tekst",     what:"Segment 3 / conclusie", who:["Eindredactie"], extra:{tekst:""} },
+  { id:209, offset:810,  dur:75,  type:"tekst",     what:"Afsluiting",            who:["Eindredactie"], extra:{tekst:"Dat was het voor vandaag. Bedankt voor het luisteren naar [naam podcast]."} },
+  { id:210, offset:885,  dur:15,  type:"jingle",    what:"Outro jingle",          who:["Eindredactie"], extra:{label:"Outro jingle"} },
 ];
 
 function buildPodcast() {
@@ -257,10 +257,10 @@ function herbereken(items, startTijd = "12:00") {
   return res;
 }
 
-function driftSec(items, uur, startTijd = "12:00") {
+function driftSec(items, uur, startTijd = "12:00", lengte = 3600) {
   const startSec = timeToSec(startTijd);
   const uurStart = startSec + (uur - 1) * 3600;
-  return uurStart + items.filter(i => i.uur === uur).reduce((s, i) => s + i.duurWerkelijkSec, 0) - (uurStart + 3600);
+  return uurStart + items.filter(i => i.uur === uur).reduce((s, i) => s + i.duurWerkelijkSec, 0) - (uurStart + lengte);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -639,7 +639,7 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
               </div>
               {rundownType === "podcast" && (
                 <div style={{fontSize:11,color:T.textMuted,background:T.inputBg,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px"}}>
-                  🎙 Podcast draaiboek — max 25 min — tijden starten op 00:00
+                  🎙 Podcast draaiboek — 15 min — tijden starten op 00:00
                 </div>
               )}
               <div>
@@ -803,15 +803,15 @@ function DriftBalk({ items, uur, startTijd }) {
 //  TotaalBalk — overzicht van het hele uur, altijd zichtbaar
 //  Alleen weergave: leest de blokken, schrijft niets weg.
 // ════════════════════════════════════════════════════════════
-function TotaalBalk({ items, uur, startTijd, onKlik }) {
+function TotaalBalk({ items, uur, startTijd, onKlik, lengte = 3600 }) {
   const uurItems = items.filter(i => i.uur === uur);
-  const drift = driftSec(items, uur, startTijd);
+  const drift = driftSec(items, uur, startTijd, lengte);
   const abs = Math.round(Math.abs(drift));
   const startSec = timeToSec(startTijd||"12:00");
   const uurStartTijd = addSec("00:00", startSec + (uur - 1) * 3600);
-  const uurEindTijd = addSec("00:00", startSec + uur * 3600);
+  const uurEindTijd = addSec("00:00", startSec + (uur - 1) * 3600 + lengte);
   const totaal = uurItems.reduce((s, i) => s + (i.duurWerkelijkSec||0), 0);
-  const schaal = Math.max(3600, totaal);
+  const schaal = Math.max(lengte, totaal);
   const ok = abs < 5;
   const tekort = drift < 0;
   const kleur = ok ? "#047857" : tekort ? "#B45309" : "#B91C1C";
@@ -841,8 +841,8 @@ function TotaalBalk({ items, uur, startTijd, onKlik }) {
                 style={{width:`${dur/schaal*100}%`,flexShrink:0,background:tc.color,opacity:0.7,borderRight:"1px solid #fff",cursor:"pointer"}}/>
             );
           })}
-          {totaal > 3600 && (
-            <div style={{position:"absolute",left:`${3600/schaal*100}%`,top:0,bottom:0,width:2,background:"#000"}}/>
+          {totaal > lengte && (
+            <div style={{position:"absolute",left:`${lengte/schaal*100}%`,top:0,bottom:0,width:2,background:"#000"}}/>
           )}
         </div>
         <span style={{flexShrink:0,fontSize:10,fontWeight:500,color:T.textMuted,fontFamily:"'IBM Plex Mono',monospace"}}>{uurEindTijd}</span>
@@ -1326,6 +1326,9 @@ export default function App() {
   const startTijd = cleanTime(actieveUitzending?.startTijd || "12:00");
   const eindTijd = cleanTime(actieveUitzending?.eindTijd || "14:00");
   const aantalUren = actieveUitzending?.aantalUren || 2;
+  // Lengte van één blok in de tijdlijn: een podcast duurt 15 minuten, een uitzending werkt per uur.
+  const isPodcastUitz = actieveUitzending?.format === "podcast";
+  const blokLengte = isPodcastUitz ? 900 : 3600;
   const isUurTab = tab.startsWith("uur_");
   const tabUur = isUurTab ? parseInt(tab.split("_")[1]) : 0;
 
@@ -1488,7 +1491,7 @@ export default function App() {
       id, ...rest,
       aantalUren: 1,
       aangemaakt: new Date().toISOString(),
-      ...(isPodcast ? { format: "podcast", startTijd: "00:00", eindTijd: "00:25" } : { aantalUren: 2 }),
+      ...(isPodcast ? { format: "podcast", startTijd: "00:00", eindTijd: "00:15" } : { aantalUren: 2 }),
     };
     await set(dbRef(db, `uitzendingen/${id}`), nieuw);
     if (rundownType === "leeg") {
@@ -1723,7 +1726,7 @@ export default function App() {
     const typeKleur={muziek:"#1565C0",jingle:"#C62828",tekst:"#CC00BB",nieuws:"#2E7D32",interview:"#E64A19",special:"#00796B"};
     const typeLabel={muziek:"MUZIEK",jingle:"JINGLE",tekst:"TEKST",nieuws:"NIEUWS",interview:"INTERVIEW",special:"SPECIAL"};
     const uren=[...new Set(rundown.map(i=>i.uur))].sort((a,b)=>a-b);
-    const html=`<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>Draaiboek — ${formatUitzendingNaam(uitz)}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Arial',sans-serif;font-size:11pt;color:#111;background:#fff}.header{padding:24px 32px 16px;border-bottom:3px solid #111;margin-bottom:24px}.header h1{font-size:22pt;font-weight:bold}.header .meta{font-size:10pt;color:#555;margin-top:6px;font-family:'Arial',sans-serif}.uur-header{font-family:'Arial',sans-serif;font-size:9pt;font-weight:bold;letter-spacing:3px;text-transform:uppercase;color:#888;padding:0 32px;margin:24px 0 8px}.blok{display:flex;gap:0;padding:10px 32px;border-bottom:1px solid #e8e8e8;page-break-inside:avoid}.blok-tijd{width:52px;flex-shrink:0;padding-top:2px}.blok-tijd .tijd{font-family:'Courier New',monospace;font-size:10pt;font-weight:bold;color:#111}.blok-tijd .duur{font-family:'Courier New',monospace;font-size:8pt;color:#888;margin-top:2px}.blok-balk{width:3px;flex-shrink:0;margin:0 12px;border-radius:2px}.blok-inhoud{flex:1}.blok-kop{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}.type-badge{font-family:'Arial',sans-serif;font-size:7pt;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;padding:2px 6px;border-radius:3px}.blok-naam{font-family:'Arial',sans-serif;font-size:11pt;font-weight:bold;color:#111}.veld{margin-top:5px}.veld .label{font-family:'Arial',sans-serif;font-size:8pt;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#888;display:block;margin-bottom:2px}.veld p{font-size:11pt;line-height:1.65;color:#222;white-space:pre-wrap}.muziek-titel{font-family:'Arial',sans-serif;font-size:12pt;font-weight:bold;color:#1565C0;margin-bottom:4px}.jingle-label{font-family:'Arial',sans-serif;font-size:10pt;color:#888;font-style:italic}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="header"><h1>${formatUitzendingNaam(uitz)}</h1><div class="meta">${formatDatum(uitz.datum)} · ${cleanTime(uitz.startTijd||'12:00')} – ${cleanTime(uitz.eindTijd||'14:00')} · ${aantalUren} uur</div></div>${uren.map(uur=>`<div class="uur-sectie"><div class="uur-header">Uur ${uur} — ${addSec(startTijd,(uur-1)*3600)} tot ${addSec(startTijd,uur*3600)}</div>${rundown.filter(i=>i.uur===uur).map(item=>{const kleur=typeKleur[item.type]||'#555';const inhoud=tekst(item);return`<div class="blok"><div class="blok-tijd"><div class="tijd">${item.timeBerekend||item.time}</div><div class="duur">${toMMSS(item.duurWerkelijkSec)}</div></div><div class="blok-balk" style="background:${kleur}"></div><div class="blok-inhoud"><div class="blok-kop"><span class="type-badge" style="background:${kleur}18;color:${kleur}">${typeLabel[item.type]||item.type.toUpperCase()}</span><span class="blok-naam">${item.extra._naam||item.what}</span></div>${inhoud}</div></div>`;}).join('')}</div>`).join('')}<script>window.onload=()=>window.print();</script></body></html>`;
+    const html=`<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>Draaiboek — ${formatUitzendingNaam(uitz)}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Arial',sans-serif;font-size:11pt;color:#111;background:#fff}.header{padding:24px 32px 16px;border-bottom:3px solid #111;margin-bottom:24px}.header h1{font-size:22pt;font-weight:bold}.header .meta{font-size:10pt;color:#555;margin-top:6px;font-family:'Arial',sans-serif}.uur-header{font-family:'Arial',sans-serif;font-size:9pt;font-weight:bold;letter-spacing:3px;text-transform:uppercase;color:#888;padding:0 32px;margin:24px 0 8px}.blok{display:flex;gap:0;padding:10px 32px;border-bottom:1px solid #e8e8e8;page-break-inside:avoid}.blok-tijd{width:52px;flex-shrink:0;padding-top:2px}.blok-tijd .tijd{font-family:'Courier New',monospace;font-size:10pt;font-weight:bold;color:#111}.blok-tijd .duur{font-family:'Courier New',monospace;font-size:8pt;color:#888;margin-top:2px}.blok-balk{width:3px;flex-shrink:0;margin:0 12px;border-radius:2px}.blok-inhoud{flex:1}.blok-kop{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}.type-badge{font-family:'Arial',sans-serif;font-size:7pt;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;padding:2px 6px;border-radius:3px}.blok-naam{font-family:'Arial',sans-serif;font-size:11pt;font-weight:bold;color:#111}.veld{margin-top:5px}.veld .label{font-family:'Arial',sans-serif;font-size:8pt;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#888;display:block;margin-bottom:2px}.veld p{font-size:11pt;line-height:1.65;color:#222;white-space:pre-wrap}.muziek-titel{font-family:'Arial',sans-serif;font-size:12pt;font-weight:bold;color:#1565C0;margin-bottom:4px}.jingle-label{font-family:'Arial',sans-serif;font-size:10pt;color:#888;font-style:italic}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="header"><h1>${formatUitzendingNaam(uitz)}</h1><div class="meta">${formatDatum(uitz.datum)} · ${cleanTime(uitz.startTijd||'12:00')} – ${cleanTime(uitz.eindTijd||'14:00')} · ${aantalUren} uur</div></div>${uren.map(uur=>`<div class="uur-sectie"><div class="uur-header">Uur ${uur} — ${addSec(startTijd,(uur-1)*3600)} tot ${addSec(startTijd,(uur-1)*3600+blokLengte)}</div>${rundown.filter(i=>i.uur===uur).map(item=>{const kleur=typeKleur[item.type]||'#555';const inhoud=tekst(item);return`<div class="blok"><div class="blok-tijd"><div class="tijd">${item.timeBerekend||item.time}</div><div class="duur">${toMMSS(item.duurWerkelijkSec)}</div></div><div class="blok-balk" style="background:${kleur}"></div><div class="blok-inhoud"><div class="blok-kop"><span class="type-badge" style="background:${kleur}18;color:${kleur}">${typeLabel[item.type]||item.type.toUpperCase()}</span><span class="blok-naam">${item.extra._naam||item.what}</span></div>${inhoud}</div></div>`;}).join('')}</div>`).join('')}<script>window.onload=()=>window.print();</script></body></html>`;
     const w=window.open('','_blank'); w.document.write(html); w.document.close();
   }
 
@@ -1732,19 +1735,19 @@ export default function App() {
   const curSec = timeToSec(curStr);
   const startSec = timeToSec(startTijd);
   function uurStartSec(u) { return startSec + (u - 1) * 3600; }
-  function uurLabel(u) { return `${addSec(startTijd,(u-1)*3600)} – ${addSec(startTijd,u*3600)}`; }
-  function pct(u) { return Math.min(100, Math.max(0, ((curSec - uurStartSec(u)) / 3600) * 100)); }
+  function uurLabel(u) { return `${addSec(startTijd,(u-1)*3600)} – ${addSec(startTijd,(u-1)*3600+blokLengte)}`; }
+  function pct(u) { return Math.min(100, Math.max(0, ((curSec - uurStartSec(u)) / blokLengte) * 100)); }
   function getActiveId(u) {
     let active = null;
     rundown.filter(i => i.uur === u).forEach(item => { if (timeToSec(item.timeBerekend||item.time) <= curSec) active = item.id; });
     return active;
   }
 
-  const uurTabs = Array.from({ length: aantalUren }, (_, i) => ({ id: `uur_${i+1}`, l: `UUR ${i+1}`, s: uurLabel(i+1) }));
+  const uurTabs = Array.from({ length: aantalUren }, (_, i) => ({ id: `uur_${i+1}`, l: isPodcastUitz ? "PODCAST" : `UUR ${i+1}`, s: uurLabel(i+1) }));
   const allTabs = [...uurTabs, { id: "redactie", l: "REDACTIE", s: "" }];
   const currentItems = isUurTab ? rundown.filter(i => i.uur === tabUur) : [];
   const itemZichtbaar = it => !(whoVis[role] && !it.who.some(w => whoVis[role].includes(w)));
-  const liveUur = isUurTab && curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur) + 3600;
+  const liveUur = isUurTab && curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur) + blokLengte;
   const liveId = liveUur ? getActiveId(tabUur) : null;
   // Alle blokken starten open. Eigen keuze van deze gebruiker (inklappen) telt daarna.
   function blokOpen(it) {
@@ -1880,8 +1883,8 @@ export default function App() {
             {actieveUitzending && isUurTab && <>
               <div style={{marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                  <span style={{fontSize:11,color:T.textMuted,fontWeight:500}}>UUR {tabUur} — {uurLabel(tabUur)}</span>
-                  {curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur)+3600 && (
+                  <span style={{fontSize:11,color:T.textMuted,fontWeight:500}}>{isPodcastUitz ? "PODCAST" : `UUR ${tabUur}`} — {uurLabel(tabUur)}</span>
+                  {curSec >= uurStartSec(tabUur) && curSec < uurStartSec(tabUur)+blokLengte && (
                     <span style={{fontSize:11,color:BRAND.roze,fontWeight:700,background:`${BRAND.roze}15`,padding:"2px 10px",borderRadius:10}}>▶ LIVE {curStr}</span>
                   )}
                 </div>
@@ -1889,7 +1892,7 @@ export default function App() {
                   <div style={{height:"100%",borderRadius:2,background:BRAND.gradient,transition:"width 1s linear",width:`${pct(tabUur)}%`}}/>
                 </div>
               </div>
-              <TotaalBalk items={rundown} uur={tabUur} startTijd={startTijd} onKlik={scrollToItem}/>
+              <TotaalBalk items={rundown} uur={tabUur} startTijd={startTijd} onKlik={scrollToItem} lengte={blokLengte}/>
               <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:6}}>
                 <button onClick={()=>setHandmatigOpen(p=>{ const n={...p}; currentItems.forEach(i=>{ n[i.id]=true; }); return n; })}
                   style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:4,cursor:"pointer",background:"transparent",border:`1px solid ${T.borderDark}`,color:T.textMuted}}>Alles open</button>
