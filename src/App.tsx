@@ -419,6 +419,7 @@ function UitzendingModal({ open, uitzendingen, onSelect, onCreate, onClose, onDe
     if (!nieuwDatum) return;
     const naam = nieuwNaam || formatDatum(nieuwDatum);
     onCreate({ datum: nieuwDatum, naam, startTijd: nieuwStart, eindTijd: nieuwEind, rundownType });
+    setNieuwNaam("");
     setAanmaken(false);
   }
 
